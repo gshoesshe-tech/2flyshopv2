@@ -89,15 +89,13 @@ function cartSubtotal() {
   return cart.items.reduce((a, it) => a + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 }
 
-function findCartItem(id, size) {
-  const s = String(size || "");
-  return cart.items.find(x => String(x.id) === String(id) && String(x.size || "") === s);
+function findCartItem(id) {
+  return cart.items.find(x => String(x.id) === String(id));
 }
 
 function addToCart(prod, qty) {
   const q = clampInt(qty, 1);
-  const sizeKey = String(prod.selectedSize || "");
-  const existing = findCartItem(prod.id, sizeKey);
+  const existing = findCartItem(prod.id);
   if (existing) existing.qty = clampInt((existing.qty || 0) + q, 1);
   else {
     cart.items.push({
@@ -108,8 +106,7 @@ function addToCart(prod, qty) {
       sku: prod.sku || "",
       category: prod.category || "",
       image: (prod.images && prod.images[0]) || prod.image_url || "",
-      qty: q,
-      size: sizeKey
+      qty: q
     });
   }
   saveCart();
@@ -123,8 +120,79 @@ function initShop() {
   const grid = $("#productsGrid");
   const empty = $("#emptyState");
 
+  // --- HELP MODAL (supports your shop.html help modal) ---
+  const helpBtn = $("#helpBtn");
+  const helpModal = $("#helpModal");
+  const helpCloseEls = helpModal ? $$("[data-help-close='1']", helpModal) : [];
+
+  function openHelp() {
+    if (!helpModal) return;
+    helpModal.classList.add("is-open");
+    helpModal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeHelp() {
+    if (!helpModal) return;
+    helpModal.classList.remove("is-open");
+    helpModal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  if (helpBtn) helpBtn.addEventListener("click", openHelp);
+  helpCloseEls.forEach(el => el.addEventListener("click", closeHelp));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && helpModal && helpModal.classList.contains("is-open")) {
+      closeHelp();
+    }
+  });
+
+
   const pills = $$(".pill");
   let activeFilter = "Earrings"; // Default category
+
+  // --- PRODUCTS DROPDOWN (supports your shop.html dropdown) ---
+  const productsToggle = $("#productsToggle");
+  const productsDropdown = document.querySelector(".productsDropdown");
+
+  function openProductsDropdown() {
+    if (!productsDropdown || !productsToggle) return;
+    productsDropdown.classList.add("is-open");
+    productsToggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeProductsDropdown() {
+    if (!productsDropdown || !productsToggle) return;
+    productsDropdown.classList.remove("is-open");
+    productsToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleProductsDropdown() {
+    if (!productsDropdown) return;
+    if (productsDropdown.classList.contains("is-open")) closeProductsDropdown();
+    else openProductsDropdown();
+  }
+
+  if (productsToggle && productsDropdown) {
+    productsToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleProductsDropdown();
+    });
+
+    // Close when clicking outside the dropdown
+    document.addEventListener("click", (e) => {
+      if (!productsDropdown.classList.contains("is-open")) return;
+      const clickedInside = productsDropdown.contains(e.target) || productsToggle.contains(e.target);
+      if (!clickedInside) closeProductsDropdown();
+    });
+
+    // Close on ESC (doesn't interfere with your other modals)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeProductsDropdown();
+    });
+  }
+
 
   // Filter Logic
   pills.forEach(p => {
@@ -133,6 +201,14 @@ function initShop() {
       p.classList.add("is-active");
       activeFilter = p.dataset.filter;
       renderProducts(currentProducts, activeFilter);
+
+      // Dropdown UX: close after selecting + reflect current label
+      closeProductsDropdown();
+      if (productsToggle) {
+        const label = (p.textContent || "").trim() || "PRODUCTS";
+        productsToggle.innerHTML = `${escapeHtml(label)} <span class="chev">▾</span>`;
+        productsToggle.setAttribute("aria-expanded", "false");
+      }
     });
   });
 
@@ -199,8 +275,6 @@ function initShop() {
   const pCategory = $("#pCategory");
   const pSku = $("#pSku");
   const pCode = $("#pCode");
-  const sizeRow = $("#sizeRow");
-  const pSize = $("#pSize");
   const pMinus = $("#pMinus");
   const pPlus = $("#pPlus");
   const pQty = $("#pQty");
@@ -234,19 +308,6 @@ function initShop() {
     pCategory.textContent = currentProd.category || "";
     pSku.textContent = currentProd.sku || "";
     pCode.textContent = currentProd.code || "";
-
-    // Close Caps size selector (Option B)
-    const cat = String(currentProd.category || "").trim().toLowerCase();
-    const isCloseCaps = (cat === "close caps");
-    if (sizeRow && pSize) {
-      if (isCloseCaps) {
-        sizeRow.hidden = false;
-        pSize.value = "";
-      } else {
-        sizeRow.hidden = true;
-        pSize.value = "";
-      }
-    }
 
     pQty.value = "1";
     syncAddBtn();
@@ -295,20 +356,7 @@ function initShop() {
   pAddBtn.addEventListener("click", () => {
     if (!currentProd) return;
     const q = clampInt(pQty.value, 1);
-
-    // Require size only for Close Caps
-    let selectedSize = "";
-    const cat2 = String(currentProd.category || "").trim().toLowerCase();
-    if (cat2 === "close caps") {
-      selectedSize = (pSize ? String(pSize.value || "").trim() : "");
-      if (!selectedSize) {
-        alert("Please select a size for Close Caps.");
-        return;
-      }
-    }
-
-    const prodToAdd = { ...currentProd, selectedSize };
-    addToCart(prodToAdd, q);
+    addToCart(currentProd, q);
     updateCartUI();
     closeProductModal();
     window.openCart(); // Open drawer
@@ -486,17 +534,17 @@ function updateCartUI() {
       <img class="cartItem__img" src="${escapeHtmlAttr(it.image || "")}" alt="" onerror="this.style.opacity=.2" />
       <div>
         <div class="cartItem__name">${escapeHtml(it.name || "")}</div>
-        <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}${it.size ? `${it.code ? " • " : ""}Size: ${escapeHtml(it.size)}` : ""}</div>
+        <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}</div>
         <div class="cartItem__row">
           <div class="cartQty">
-            <button type="button" data-dec="${it.id}" data-size="${escapeHtmlAttr(it.size || "")}">−</button>
-            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${it.id}" data-size="${escapeHtmlAttr(it.size || "")}" />
-            <button type="button" data-inc="${it.id}" data-size="${escapeHtmlAttr(it.size || "")}">+</button>
+            <button type="button" data-dec="${it.id}">−</button>
+            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${it.id}" />
+            <button type="button" data-inc="${it.id}">+</button>
           </div>
           <div style="color:rgba(255,255,255,.75);font-weight:700;">${money((Number(it.price)||0) * (Number(it.qty)||0))}</div>
         </div>
       </div>
-      <button class="trashBtn" type="button" data-del="${it.id}" data-size="${escapeHtmlAttr(it.size || "")}" aria-label="Remove item">🗑</button>
+      <button class="trashBtn" type="button" data-del="${it.id}" aria-label="Remove item">🗑</button>
     `;
     itemsWrap.appendChild(row);
   });
@@ -505,8 +553,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-dec]").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-dec");
-      const size = btn.getAttribute("data-size") || "";
-      const item = findCartItem(id, size);
+      const item = findCartItem(id);
       if (!item) return;
       item.qty = Math.max(1, clampInt(item.qty, 1) - 1);
       saveCart(); updateCartUI();
@@ -516,8 +563,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-inc]").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-inc");
-      const size = btn.getAttribute("data-size") || "";
-      const item = findCartItem(id, size);
+      const item = findCartItem(id);
       if (!item) return;
       item.qty = clampInt(item.qty, 1) + 1;
       saveCart(); updateCartUI();
@@ -527,8 +573,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-qty]").forEach(inp => {
     inp.addEventListener("input", () => {
       const id = inp.getAttribute("data-qty");
-      const size = inp.getAttribute("data-size") || "";
-      const item = findCartItem(id, size);
+      const item = findCartItem(id);
       if (!item) return;
       item.qty = clampInt(inp.value, 1);
       saveCart(); updateCartUI();
@@ -538,8 +583,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-del");
-      const size = btn.getAttribute("data-size") || "";
-      cart.items = cart.items.filter(x => !(String(x.id) === String(id) && String(x.size || "") === String(size)));
+      cart.items = cart.items.filter(x => String(x.id) !== String(id));
       saveCart(); updateCartUI();
     });
   });
