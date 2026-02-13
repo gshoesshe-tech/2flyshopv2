@@ -1,3 +1,4 @@
+
 /* 2FLY Wholesale System (Fixed)
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
@@ -483,21 +484,47 @@ function wireCartUI() {
     if (notes) lines.push(`Notes: ${notes}`);
     lines.push("");
     lines.push("Order List:");
+    lines.push("");
 
+    // Group items by category
+    const groups = new Map();
     cart.items.forEach(it => {
-      const qty = Number(it.qty) || 0;
-      
-      // --- CHANGED LOGIC HERE ---
-      // We prioritize SKU. If no SKU, use Code. If no Code, use Name.
-      const label = it.sku || it.code || it.name;
-      
-      // Removed price per item and name to save paper
-      lines.push(`• ${label} – x${qty}`);
+      const raw = (it.category || "").trim();
+      const cat = raw ? raw : "Uncategorized";
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat).push(it);
     });
 
-    lines.push("");
+    const cats = Array.from(groups.keys()).sort((a, b) =>
+      a.toUpperCase().localeCompare(b.toUpperCase())
+    );
+
+    cats.forEach(cat => {
+      const items = groups.get(cat) || [];
+      lines.push(`[${String(cat).toUpperCase()}]`);
+
+      let catQty = 0;
+      let catAmount = 0;
+
+      items.forEach(it => {
+        const qty = Number(it.qty) || 0;
+        const label = it.sku || it.code || it.name;
+        lines.push(`• ${label} – x${qty}`);
+
+        catQty += qty;
+        catAmount += (Number(it.price) || 0) * qty;
+      });
+
+      lines.push(`Category Qty: ${catQty}`);
+      lines.push(`Category Amount: ${money(catAmount)}`);
+      lines.push("");
+    });
+
+    // Overall totals
+    const grandQty = cartTotalQty();
     lines.push(`Total Amount: ${money(cartSubtotal())}`);
-    lines.push(`Total Quantity: ${cartTotalQty()}`);
+    lines.push(`Total Quantity: ${grandQty}`);
+    lines.push(`Total Items (Grand): ${grandQty}`);
 
     const out = lines.join("\n");
     const ta = $("#orderText");
