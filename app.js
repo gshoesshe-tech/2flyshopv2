@@ -37,6 +37,20 @@ const $ = (sel, p = document) => p.querySelector(sel);
 const $$ = (sel, p = document) => p.querySelectorAll(sel);
 
 
+// --- CDN helper (Supabase -> Cloudflare Worker) ---
+const SUPABASE_ORIGIN = "https://ngthitqzqtnvmsthwddl.supabase.co";
+const CDN_ORIGIN = "https://cdn.2flygalleria.com";
+
+function toCDN(url) {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  if (u.startsWith(CDN_ORIGIN)) return u;
+  if (u.startsWith(SUPABASE_ORIGIN)) return u.replace(SUPABASE_ORIGIN, CDN_ORIGIN);
+  return u; // keep external URLs unchanged
+}
+
+
+
 // ---------------- LANDING (index.html) ----------------
 // 2. FIX: Added logic for the Landing page
 function initLanding() {
@@ -106,7 +120,7 @@ function addToCart(prod, qty) {
       code: prod.code || "",
       sku: prod.sku || "",
       category: prod.category || "",
-      image: (prod.images && prod.images[0]) || prod.image_url || "",
+      image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q
     });
   }
@@ -251,11 +265,11 @@ function initShop() {
     empty.hidden = filtered.length !== 0;
 
     filtered.forEach(prod => {
-      const img = (prod.images && prod.images[0]) || prod.image_url || "";
+      const img = toCDN((prod.images && prod.images[0]) || prod.image_url || "");
       const card = document.createElement("div");
       card.className = "card";
       card.innerHTML = `
-        <img class="card__img" src="${escapeHtmlAttr(img)}" alt="${escapeHtmlAttr(prod.name || "")}" onerror="this.style.opacity=.2" />
+        <img class="card__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(img)}" alt="${escapeHtmlAttr(prod.name || "")}" onerror="this.style.opacity=.2" />
         <div class="card__body">
           <div class="card__name">${escapeHtml(prod.name || "")}</div>
           <div class="card__price">${money(prod.price)}</div>
@@ -289,7 +303,7 @@ function initShop() {
     // images
     const imgs = currentProd.images.length ? currentProd.images : [currentProd.image_url].filter(Boolean);
     const main = imgs[0] || "";
-    pMain.src = main;
+    pMain.src = toCDN(main);
     pMain.alt = currentProd.name;
 
     pThumbs.innerHTML = "";
@@ -297,9 +311,9 @@ function initShop() {
       const b = document.createElement("button");
       b.className = "thumb";
       b.type = "button";
-      b.innerHTML = `<img src="${escapeHtmlAttr(u)}" alt="" />`;
+      b.innerHTML = `<img loading="lazy" decoding="async" src="${escapeHtmlAttr(toCDN(u))}" alt="" />`;
       b.addEventListener("click", () => {
-        pMain.src = u;
+        pMain.src = toCDN(u);
       });
       pThumbs.appendChild(b);
     });
@@ -558,7 +572,7 @@ function updateCartUI() {
     const row = document.createElement("div");
     row.className = "cartItem";
     row.innerHTML = `
-      <img class="cartItem__img" src="${escapeHtmlAttr(it.image || "")}" alt="" onerror="this.style.opacity=.2" />
+      <img class="cartItem__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(toCDN(it.image || ""))}" alt="" onerror="this.style.opacity=.2" />
       <div>
         <div class="cartItem__name">${escapeHtml(it.name || "")}</div>
         <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}</div>
@@ -654,7 +668,7 @@ function initAdmin() {
     if (!imgList) return;
     imgList.innerHTML = stagedImages.map((url, idx) => `
       <div class="imgChip">
-        <img src="${escapeHtmlAttr(url)}" alt="" loading="lazy" />
+        <img src="${escapeHtmlAttr(toCDN(url))}" alt="" loading="lazy" decoding="async" />
         <div class="imgChip__row">
           <button class="imgChip__btn" type="button" data-rm="${idx}">Remove</button>
           <span style="color:rgba(255,255,255,.45); font-size:11px;">${idx + 1}</span>
@@ -674,7 +688,7 @@ function initAdmin() {
   addUrlBtn?.addEventListener('click', () => {
     const u = (aImageUrl?.value || '').trim();
     if (!u) return;
-    stagedImages.push(u);
+    stagedImages.push(toCDN(u));
     if (aImageUrl) aImageUrl.value = '';
     renderStaged();
   });
@@ -688,7 +702,7 @@ function initAdmin() {
     if (error) throw error;
 
     const { data } = sb.storage.from('product_images').getPublicUrl(path);
-    return data?.publicUrl || '';
+    return toCDN(data?.publicUrl || '');
   }
 
   uploadFilesBtn?.addEventListener('click', async () => {
@@ -731,7 +745,7 @@ function initAdmin() {
     setMsg('');
     const list = data || [];
     adminProducts.innerHTML = list.map((p) => {
-      const img = (Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || '');
+      const img = toCDN((Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || ''));
       const meta = [
         p.code ? `Code: ${p.code}` : null,
         `₱${Number(p.price || 0)}`,
