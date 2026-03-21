@@ -854,3 +854,31 @@ html, body {
   overflow: hidden;
   position: relative;
 }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #000;
+}
+
+.landing {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.landing__image {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  z-index: -2;
+}
+
+.landing__vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.85) 100%);
+  z-index: -1;
+}
