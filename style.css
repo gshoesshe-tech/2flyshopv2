@@ -843,12 +843,14 @@ body{
   background: rgba(255,255,255,.03);
   color: rgba(255,255,255,.82);
 }
-.landing__image {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+.landing {
   height: 100vh;
-  object-fit: cover;
-  z-index: -2;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
 }
