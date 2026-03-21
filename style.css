@@ -843,3 +843,20 @@ body{
   background: rgba(255,255,255,.03);
   color: rgba(255,255,255,.82);
 }
+.landing__image {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+
+/* optional: smoother dark overlay (better for luxury look) */
+.landing__vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.85) 100%);
+  z-index: -1;
+}
