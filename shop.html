@@ -29,6 +29,8 @@
           <button class="pill" data-filter="CRYSTAL CASE" type="button">CRYSTAL CASE</button>
           <button class="pill" data-filter="Boxers" type="button" role="menuitem">BOXERS</button>
           <button class="pill" data-filter="TANK TOPS" type="button" role="menuitem">TANK TOPS</button>
+          <button class="pill" data-filter="FITTED TEES" type="button" role="menuitem">FITTED TEES</button>
+          <button class="pill" data-filter="JACKETS" type="button" role="menuitem">JACKETS</button>
         </div>
       </div>
 
@@ -101,6 +103,12 @@
             <div><span class="muted">Category:</span> <span id="pCategory"></span></div>
             <div><span class="muted">SKU:</span> <span id="pSku"></span></div>
             <div><span class="muted">Code:</span> <span id="pCode"></span></div>
+          </div>
+
+          <div id="pSizeWrap" class="sizeGroup" hidden>
+            <div class="sizeGroup__label">Select Size</div>
+            <div id="pSizeOptions" class="sizeOptions"></div>
+            <div id="pSizeError" class="sizeError" hidden>Please select a size.</div>
           </div>
 
           <div class="qtyRow">
