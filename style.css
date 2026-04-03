@@ -882,3 +882,48 @@ html, body {
   background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.85) 100%);
   z-index: -1;
 }
+
+
+/* ---------------- Product Sizes ---------------- */
+.sizeGroup{
+  margin-top:16px;
+}
+.sizeGroup__label{
+  margin-bottom:10px;
+  font-family:var(--fontHead);
+  font-weight:800;
+  letter-spacing:.08em;
+  font-size:12px;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.72);
+}
+.sizeOptions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.sizeChip{
+  min-width:54px;
+  height:42px;
+  padding:0 14px;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(0,0,0,.25);
+  color:#fff;
+  font-family:var(--fontHead);
+  font-weight:800;
+  letter-spacing:.08em;
+  cursor:pointer;
+}
+.sizeChip:hover{
+  border-color:rgba(255,255,255,.30);
+}
+.sizeChip.is-active{
+  background:#fff;
+  color:#000;
+  border-color:#fff;
+}
+.sizeError{
+  margin-top:8px;
+  color:rgba(255,120,120,.95);
+  font-size:12px;
+}
