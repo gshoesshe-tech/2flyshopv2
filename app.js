@@ -86,7 +86,15 @@ const cart = {
 
 function loadCart() {
   try {
-    cart.items = JSON.parse(localStorage.getItem("cart_v1") || "[]") || [];
+    const raw = JSON.parse(localStorage.getItem("cart_v1") || "[]") || [];
+    cart.items = raw.map((it) => {
+      const selectedSize = String(it?.selected_size || "").trim();
+      return {
+        ...it,
+        selected_size: selectedSize,
+        cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
+      };
+    });
   } catch {
     cart.items = [];
   }
@@ -104,26 +112,37 @@ function cartSubtotal() {
   return cart.items.reduce((a, it) => a + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 }
 
-function findCartItem(id) {
-  return cart.items.find(x => String(x.id) === String(id));
+function getCartItemKey(id, selectedSize = "") {
+  const sizeKey = String(selectedSize || "").trim().toUpperCase();
+  return `${String(id)}::${sizeKey}`;
 }
 
-function addToCart(prod, qty) {
+function findCartItem(id, selectedSize = "") {
+  const key = getCartItemKey(id, selectedSize);
+  return cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || "")) === key);
+}
+
+function addToCart(prod, qty, selectedSize = "") {
   const q = clampInt(qty, 1);
-  const existing = findCartItem(prod.id);
+  const cleanSize = String(selectedSize || "").trim();
+  const existing = findCartItem(prod.id, cleanSize);
+
   if (existing) existing.qty = clampInt((existing.qty || 0) + q, 1);
   else {
     cart.items.push({
       id: prod.id,
+      cart_key: getCartItemKey(prod.id, cleanSize),
       name: prod.name,
       price: Number(prod.price) || 0,
       code: prod.code || "",
       sku: prod.sku || "",
       category: prod.category || "",
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
-      qty: q
+      qty: q,
+      selected_size: cleanSize
     });
   }
+
   saveCart();
 }
 
@@ -290,12 +309,53 @@ function initShop() {
   const pCategory = $("#pCategory");
   const pSku = $("#pSku");
   const pCode = $("#pCode");
+  const pSizeWrap = $("#pSizeWrap");
+  const pSizeOptions = $("#pSizeOptions");
+  const pSizeError = $("#pSizeError");
   const pMinus = $("#pMinus");
   const pPlus = $("#pPlus");
   const pQty = $("#pQty");
   const pAddBtn = $("#pAddBtn");
 
   let currentProd = null;
+  let selectedSize = "";
+
+  function renderSizeOptions(prod) {
+    const sizes = Array.isArray(prod?.sizes) ? prod.sizes : [];
+    selectedSize = "";
+
+    if (pSizeError) {
+      pSizeError.hidden = true;
+      pSizeError.textContent = "Please select a size.";
+    }
+
+    if (!pSizeWrap || !pSizeOptions) return;
+
+    if (!sizes.length) {
+      pSizeWrap.hidden = true;
+      pSizeOptions.innerHTML = "";
+      return;
+    }
+
+    pSizeWrap.hidden = false;
+    pSizeOptions.innerHTML = "";
+
+    sizes.forEach((size) => {
+      const btn = document.createElement("button");
+      btn.className = "sizeChip";
+      btn.type = "button";
+      btn.textContent = size;
+      btn.setAttribute("data-size", size);
+      btn.addEventListener("click", () => {
+        selectedSize = size;
+        pSizeOptions.querySelectorAll(".sizeChip").forEach((chip) => {
+          chip.classList.toggle("is-active", chip.getAttribute("data-size") === size);
+        });
+        if (pSizeError) pSizeError.hidden = true;
+      });
+      pSizeOptions.appendChild(btn);
+    });
+  }
 
   function openProductModal(prod) {
     currentProd = normalizeProduct(prod);
@@ -324,6 +384,7 @@ function initShop() {
     pSku.textContent = currentProd.sku || "";
     pCode.textContent = currentProd.code || "";
 
+    renderSizeOptions(currentProd);
     pQty.value = "1";
     syncAddBtn();
 
@@ -337,6 +398,7 @@ function initShop() {
     modal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
     currentProd = null;
+    selectedSize = "";
   }
 
   modalCloseEls.forEach(el => el.addEventListener("click", closeProductModal));
@@ -370,8 +432,17 @@ function initShop() {
 
   pAddBtn.addEventListener("click", () => {
     if (!currentProd) return;
+
+    if (Array.isArray(currentProd.sizes) && currentProd.sizes.length && !selectedSize) {
+      if (pSizeError) {
+        pSizeError.hidden = false;
+        pSizeError.textContent = "Please select a size.";
+      }
+      return;
+    }
+
     const q = clampInt(pQty.value, 1);
-    addToCart(currentProd, q);
+    addToCart(currentProd, q, selectedSize);
     updateCartUI();
     closeProductModal();
     window.openCart(); // Open drawer
@@ -390,7 +461,8 @@ function normalizeProduct(p) {
     sku: p.sku || "",
     category: p.category || "Earrings",
     image_url: p.image_url || "",
-    images: Array.isArray(p.images) ? p.images.filter(Boolean) : []
+    images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+    sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : []
   };
 }
 
@@ -522,8 +594,9 @@ function wireCartUI() {
 
       items.forEach(it => {
         const qty = Number(it.qty) || 0;
-        const label = it.sku || it.code || it.name;
-        lines.push(`• ${label} – x${qty}`);
+        const baseLabel = it.sku || it.code || it.name;
+        const sizeLabel = it.selected_size ? `${baseLabel} (Size: ${it.selected_size})` : baseLabel;
+        lines.push(`• ${sizeLabel} – x${qty}`);
 
         catQty += qty;
         catAmount += (Number(it.price) || 0) * qty;
@@ -575,17 +648,18 @@ function updateCartUI() {
       <img class="cartItem__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(toCDN(it.image || ""))}" alt="" onerror="this.style.opacity=.2" />
       <div>
         <div class="cartItem__name">${escapeHtml(it.name || "")}</div>
+        <div class="cartItem__meta">${it.selected_size ? `Size: ${escapeHtml(it.selected_size)}` : ""}</div>
         <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}</div>
         <div class="cartItem__row">
           <div class="cartQty">
-            <button type="button" data-dec="${it.id}">−</button>
-            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${it.id}" />
-            <button type="button" data-inc="${it.id}">+</button>
+            <button type="button" data-dec="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}">−</button>
+            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" />
+            <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}">+</button>
           </div>
           <div style="color:rgba(255,255,255,.75);font-weight:700;">${money((Number(it.price)||0) * (Number(it.qty)||0))}</div>
         </div>
       </div>
-      <button class="trashBtn" type="button" data-del="${it.id}" aria-label="Remove item">🗑</button>
+      <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" aria-label="Remove item">🗑</button>
     `;
     itemsWrap.appendChild(row);
   });
@@ -593,8 +667,8 @@ function updateCartUI() {
   // Attach events
   itemsWrap.querySelectorAll("[data-dec]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-dec");
-      const item = findCartItem(id);
+      const key = btn.getAttribute("data-dec");
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
       item.qty = Math.max(1, clampInt(item.qty, 1) - 1);
       saveCart(); updateCartUI();
@@ -603,8 +677,8 @@ function updateCartUI() {
 
   itemsWrap.querySelectorAll("[data-inc]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-inc");
-      const item = findCartItem(id);
+      const key = btn.getAttribute("data-inc");
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
       item.qty = clampInt(item.qty, 1) + 1;
       saveCart(); updateCartUI();
@@ -613,8 +687,8 @@ function updateCartUI() {
 
   itemsWrap.querySelectorAll("[data-qty]").forEach(inp => {
     inp.addEventListener("input", () => {
-      const id = inp.getAttribute("data-qty");
-      const item = findCartItem(id);
+      const key = inp.getAttribute("data-qty");
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
       item.qty = clampInt(inp.value, 1);
       saveCart(); updateCartUI();
@@ -623,8 +697,8 @@ function updateCartUI() {
 
   itemsWrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-del");
-      cart.items = cart.items.filter(x => String(x.id) !== String(id));
+      const key = btn.getAttribute("data-del");
+      cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) !== String(key));
       saveCart(); updateCartUI();
     });
   });
@@ -652,6 +726,7 @@ function initAdmin() {
   const aCode = $("#aCode");
   const aSku = $("#aSku");
   const aCategory = $("#aCategory");
+  const aSizes = $("#aSizes");
   const aStatus = $("#aStatus");
   const aSoldOut = $("#aSoldOut");
   const aImageUrl = $("#aImageUrl");
@@ -746,9 +821,11 @@ function initAdmin() {
     const list = data || [];
     adminProducts.innerHTML = list.map((p) => {
       const img = toCDN((Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || ''));
+      const sizeSummary = Array.isArray(p.sizes) && p.sizes.length ? `Sizes: ${p.sizes.join(', ')}` : null;
       const meta = [
         p.code ? `Code: ${p.code}` : null,
         `₱${Number(p.price || 0)}`,
+        sizeSummary,
         p.sold_out ? 'SOLD OUT' : null,
       ].filter(Boolean).join(' • ');
 
@@ -789,6 +866,10 @@ function initAdmin() {
     const code = (aCode?.value || '').trim();
     const sku = (aSku?.value || '').trim();
     const category = (aCategory?.value || 'Earrings');
+    const sizes = String(aSizes?.value || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
     const status = (aStatus?.value || 'active');
     const sold_out = Boolean(aSoldOut?.checked);
 
@@ -801,6 +882,7 @@ function initAdmin() {
       code,
       sku,
       category,
+      sizes,
       status,
       sold_out,
       images: stagedImages,
@@ -822,6 +904,7 @@ function initAdmin() {
       if(aPrice) aPrice.value = "";
       if(aCode) aCode.value = "";
       if(aSku) aSku.value = "";
+      if(aSizes) aSizes.value = "";
       stagedImages = [];
       renderStaged();
       loadAdminProducts();
