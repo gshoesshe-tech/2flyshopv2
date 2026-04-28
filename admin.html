@@ -6,22 +6,37 @@
   <title>2FLY!GALLERIA — Admin</title>
   <link rel="stylesheet" href="./style.css" />
   <script src="./config.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="./app.js" defer></script>
 </head>
 <body class="page-admin" data-page="admin">
 
-  <div class="adminWrap">
+  <section id="authCard" class="keyGate">
+    <div class="keyGate__card">
+      <div class="keyGate__title">Admin Login</div>
+      <div class="keyGate__text">Log in with your approved 2FLY admin email before adding, uploading, editing, or deleting products.</div>
+      <input id="loginEmail" class="keyGate__input" type="email" placeholder="Admin email" autocomplete="email" />
+      <input id="loginPassword" class="keyGate__input" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn" class="btn btn--solid btn--wide" type="button">LOGIN</button>
+      <div id="authMsg" class="keyGate__hint"></div>
+      <div class="keyGate__hint">Access is controlled by Supabase Auth + RLS, not just this login screen.</div>
+    </div>
+  </section>
+
+  <div id="adminApp" class="adminWrap" hidden>
     <div class="adminTop">
       <div>
         <div class="adminTitle">Admin</div>
         <div class="adminSub">Add / edit products (supports multi-image).</div>
+        <div id="adminUser" class="adminSub"></div>
       </div>
-      <a class="btn btn--ghost" href="./shop.html">Go to Shop</a>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+        <a class="btn btn--ghost" href="./shop.html">Go to Shop</a>
+        <button id="logoutBtn" class="btn btn--ghost" type="button">Logout</button>
+      </div>
     </div>
 
-    <!-- Key setup -->
-<section class="adminCard">
+    <section class="adminCard">
       <h3 class="adminCard__title">Add product</h3>
 
       <div class="adminGrid">
@@ -34,18 +49,16 @@
           <option value="Earrings">Earrings</option>
           <option value="Skull Caps">Skull Caps</option>
           <option value="Boxers">Boxers</option>
-                  <option value="RINGS">RINGS</option>
+          <option value="RINGS">RINGS</option>
           <option value="Close Caps">Close Caps</option>
-          <!-- NEW -->
-  <option value="PODS">PODS</option>
-  <option value="EARRINGS BUNDLES">EARRINGS BUNDLES</option>
-  <option value="CRYSTAL CASE">CRYSTAL CASE</option>
-  <option value="TANK TOPS">TANK TOPS</option>
-  <option value="PRO CLUB">PRO CLUB</option>
-  <option value="FITTED TEES">FITTED TEES</option>
-  <option value="JACKETS">JACKETS</option>
-          
-</select>
+          <option value="PODS">PODS</option>
+          <option value="EARRINGS BUNDLES">EARRINGS BUNDLES</option>
+          <option value="CRYSTAL CASE">CRYSTAL CASE</option>
+          <option value="TANK TOPS">TANK TOPS</option>
+          <option value="PRO CLUB">PRO CLUB</option>
+          <option value="FITTED TEES">FITTED TEES</option>
+          <option value="JACKETS">JACKETS</option>
+        </select>
 
         <input id="aSizes" class="input" placeholder="Sizes (optional, e.g. S,M,L,XL)" />
 
@@ -87,12 +100,4 @@
   </div>
 
 </body>
-
 </html>
-
-
-
-
-
-
-
