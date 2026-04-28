@@ -754,16 +754,41 @@ function initAdmin() {
   let stagedImages = [];
   let authReady = false;
 
+  // Hide admin panel until Supabase confirms the user is an approved admin.
+  if (adminApp) {
+    adminApp.hidden = true;
+    adminApp.style.display = 'none';
+  }
+
   function showLogin() {
-    if (authCard) authCard.hidden = false;
-    if (adminApp) adminApp.hidden = true;
+    const gate = authCard || document.getElementById('adminAuthGate') || document.getElementById('adminGate') || document.querySelector('.keyGate');
+    const app = adminApp || document.querySelector('.adminWrap');
+
+    if (gate) {
+      gate.hidden = false;
+      gate.style.display = '';
+    }
+    if (app) {
+      app.hidden = true;
+      app.style.display = 'none';
+    }
     if (adminUser) adminUser.textContent = '';
     setMsg('');
   }
 
   function showAdmin(email) {
-    if (authCard) authCard.hidden = true;
-    if (adminApp) adminApp.hidden = false;
+    const gate = authCard || document.getElementById('adminAuthGate') || document.getElementById('adminGate') || document.querySelector('.keyGate');
+    const app = adminApp || document.querySelector('.adminWrap');
+
+    if (gate) {
+      gate.hidden = true;
+      gate.style.display = 'none';
+      gate.classList.remove('is-open');
+    }
+    if (app) {
+      app.hidden = false;
+      app.style.display = 'block';
+    }
     if (adminUser) adminUser.textContent = email ? `Logged in: ${email}` : 'Logged in';
   }
 
