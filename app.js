@@ -709,6 +709,14 @@ function updateCartUI() {
 function initAdmin() {
   const sb = getSupabase();
   const msgEl = document.getElementById('adminMsg');
+  const authMsg = document.getElementById('authMsg');
+  const authCard = document.getElementById('authCard');
+  const adminApp = document.getElementById('adminApp');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const adminUser = document.getElementById('adminUser');
 
   const setMsg = (text, isErr = false) => {
     if (!msgEl) return;
@@ -716,28 +724,113 @@ function initAdmin() {
     msgEl.style.color = isErr ? 'rgba(255,90,90,.95)' : 'rgba(255,255,255,.70)';
   };
 
+  const setAuthMsg = (text, isErr = false) => {
+    if (!authMsg) return;
+    authMsg.textContent = text || '';
+    authMsg.style.color = isErr ? 'rgba(255,90,90,.95)' : 'rgba(255,255,255,.70)';
+  };
+
   if (!sb) {
-    setMsg('Supabase not configured in config.js', true);
+    setAuthMsg('Supabase not configured in config.js', true);
     return;
   }
 
-  const aName = $("#aName");
-  const aPrice = $("#aPrice");
-  const aCode = $("#aCode");
-  const aSku = $("#aSku");
-  const aCategory = $("#aCategory");
-  const aSizes = $("#aSizes");
-  const aStatus = $("#aStatus");
-  const aSoldOut = $("#aSoldOut");
-  const aImageUrl = $("#aImageUrl");
-  const addUrlBtn = $("#addUrlBtn");
-  const aFiles = $("#aFiles");
-  const uploadFilesBtn = $("#uploadFilesBtn");
-  const imgList = $("#imgList");
-  const createProductBtn = $("#createProductBtn");
-  const adminProducts = $("#adminProducts");
+  const aName = $('#aName');
+  const aPrice = $('#aPrice');
+  const aCode = $('#aCode');
+  const aSku = $('#aSku');
+  const aCategory = $('#aCategory');
+  const aSizes = $('#aSizes');
+  const aStatus = $('#aStatus');
+  const aSoldOut = $('#aSoldOut');
+  const aImageUrl = $('#aImageUrl');
+  const addUrlBtn = $('#addUrlBtn');
+  const aFiles = $('#aFiles');
+  const uploadFilesBtn = $('#uploadFilesBtn');
+  const imgList = $('#imgList');
+  const createProductBtn = $('#createProductBtn');
+  const adminProducts = $('#adminProducts');
 
   let stagedImages = [];
+  let authReady = false;
+
+  function showLogin() {
+    if (authCard) authCard.hidden = false;
+    if (adminApp) adminApp.hidden = true;
+    if (adminUser) adminUser.textContent = '';
+    setMsg('');
+  }
+
+  function showAdmin(email) {
+    if (authCard) authCard.hidden = true;
+    if (adminApp) adminApp.hidden = false;
+    if (adminUser) adminUser.textContent = email ? `Logged in: ${email}` : 'Logged in';
+  }
+
+  async function requireAdminSession() {
+    const { data, error } = await sb.auth.getSession();
+    if (error || !data?.session) {
+      showLogin();
+      return null;
+    }
+
+    const user = data.session.user;
+
+    // Optional check: this works when you run the admins table SQL below.
+    // RLS is still the real protection even if this check fails due to setup.
+    const { data: adminRows, error: adminErr } = await sb
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .limit(1);
+
+    if (adminErr || !adminRows || adminRows.length === 0) {
+      showLogin();
+      setAuthMsg('Logged in, but this account is not listed as an admin in Supabase.', true);
+      await sb.auth.signOut();
+      return null;
+    }
+
+    showAdmin(user.email);
+    return user;
+  }
+
+  loginBtn?.addEventListener('click', async () => {
+    const email = (loginEmail?.value || '').trim();
+    const password = loginPassword?.value || '';
+    if (!email || !password) return setAuthMsg('Enter your admin email and password.', true);
+
+    loginBtn.disabled = true;
+    setAuthMsg('Logging in…');
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      setAuthMsg(`Login failed: ${error.message}`, true);
+      loginBtn.disabled = false;
+      return;
+    }
+
+    setAuthMsg('');
+    loginBtn.disabled = false;
+    const user = await requireAdminSession();
+    if (user) loadAdminProducts();
+  });
+
+  [loginEmail, loginPassword].forEach((el) => {
+    el?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loginBtn?.click();
+    });
+  });
+
+  logoutBtn?.addEventListener('click', async () => {
+    await sb.auth.signOut();
+    showLogin();
+  });
+
+  sb.auth.onAuthStateChange(async (_event, session) => {
+    if (!authReady) return;
+    if (!session) showLogin();
+  });
 
   function renderStaged() {
     if (!imgList) return;
@@ -769,7 +862,9 @@ function initAdmin() {
   });
 
   async function uploadOne(file) {
-    // Sanitize filename
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData?.session) throw new Error('Please log in first.');
+
     const safeName = String(file.name || 'image').replace(/[^a-z0-9_.-]/gi, '_');
     const path = `public/products/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
 
@@ -823,21 +918,26 @@ function initAdmin() {
       const img = toCDN((Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || ''));
       const sizeSummary = Array.isArray(p.sizes) && p.sizes.length ? `Sizes: ${p.sizes.join(', ')}` : null;
       const meta = [
+        p.category ? `Category: ${p.category}` : null,
         p.code ? `Code: ${p.code}` : null,
         `₱${Number(p.price || 0)}`,
         sizeSummary,
+        p.status ? `Status: ${p.status}` : null,
         p.sold_out ? 'SOLD OUT' : null,
       ].filter(Boolean).join(' • ');
 
       return `
         <div class="adminItem">
           <div class="adminItem__top">
-            <div>
-              <div class="adminItem__name">${escapeHtml(p.name || '')}</div>
-              <div class="adminItem__meta">${escapeHtml(meta)}</div>
+            <div style="display:flex; gap:12px; align-items:center;">
+              ${img ? `<img src="${escapeHtmlAttr(img)}" alt="" style="width:54px;height:54px;object-fit:cover;border:1px solid rgba(255,255,255,.12);" />` : ''}
+              <div>
+                <div class="adminItem__name">${escapeHtml(p.name || '')}</div>
+                <div class="adminItem__meta">${escapeHtml(meta)}</div>
+              </div>
             </div>
             <div class="adminItem__btns">
-              <button class="btn btn--ghost" type="button" data-del="${p.id}">Delete</button>
+              <button class="btn btn--ghost" type="button" data-del="${escapeHtmlAttr(p.id)}">Delete</button>
             </div>
           </div>
         </div>
@@ -846,7 +946,7 @@ function initAdmin() {
 
     adminProducts.querySelectorAll('button[data-del]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if(!confirm("Are you sure?")) return;
+        if (!confirm('Are you sure you want to delete this product?')) return;
         const id = btn.getAttribute('data-del');
         setMsg('Deleting…');
         const { error: delErr } = await sb.from('products').delete().eq('id', id);
@@ -861,6 +961,9 @@ function initAdmin() {
   }
 
   createProductBtn?.addEventListener('click', async () => {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData?.session) return setMsg('Please log in first.', true);
+
     const name = (aName?.value || '').trim();
     const price = Number((aPrice?.value || '').trim());
     const code = (aCode?.value || '').trim();
@@ -874,8 +977,8 @@ function initAdmin() {
     const sold_out = Boolean(aSoldOut?.checked);
 
     if (!name) return setMsg('Name is required.', true);
-    
-    // Create product object
+    if (!Number.isFinite(price) || price < 0) return setMsg('Valid price is required.', true);
+
     const payload = {
       name,
       price,
@@ -886,7 +989,7 @@ function initAdmin() {
       status,
       sold_out,
       images: stagedImages,
-      image_url: stagedImages[0] || null // backward compat
+      image_url: stagedImages[0] || null
     };
 
     createProductBtn.disabled = true;
@@ -899,12 +1002,12 @@ function initAdmin() {
       setMsg(`Failed: ${error.message}`, true);
     } else {
       setMsg('Created ✅');
-      // Reset form
-      if(aName) aName.value = "";
-      if(aPrice) aPrice.value = "";
-      if(aCode) aCode.value = "";
-      if(aSku) aSku.value = "";
-      if(aSizes) aSizes.value = "";
+      if (aName) aName.value = '';
+      if (aPrice) aPrice.value = '';
+      if (aCode) aCode.value = '';
+      if (aSku) aSku.value = '';
+      if (aSizes) aSizes.value = '';
+      if (aSoldOut) aSoldOut.checked = false;
       stagedImages = [];
       renderStaged();
       loadAdminProducts();
@@ -912,7 +1015,11 @@ function initAdmin() {
     createProductBtn.disabled = false;
   });
 
-  loadAdminProducts();
+  (async () => {
+    authReady = true;
+    const user = await requireAdminSession();
+    if (user) loadAdminProducts();
+  })();
 }
 
 
