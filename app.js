@@ -79,6 +79,35 @@ function initLanding() {
 }
 
 
+
+// ---------------- SOLD OUT + WHOLESALE PRICING HELPERS ----------------
+function isTankTopCategory(category = "") {
+  const c = String(category || "").trim().toUpperCase();
+  return c === "TANK TOPS" || c === "TANK TOP" || c.includes("TANK");
+}
+
+function getTankTopPrice(qty) {
+  const q = clampInt(qty, 10);
+  if (q >= 26) return 45;
+  if (q >= 16) return 50;
+  return 65;
+}
+
+function getMinQtyForProduct(prod) {
+  return isTankTopCategory(prod?.category) ? 10 : 1;
+}
+
+function getUnitPriceForProduct(prod, qty) {
+  if (isTankTopCategory(prod?.category)) return getTankTopPrice(qty);
+  return Number(prod?.price) || 0;
+}
+
+function getCartUnitPrice(item) {
+  if (isTankTopCategory(item?.category)) return getTankTopPrice(Number(item?.qty) || 10);
+  return Number(item?.price) || 0;
+}
+
+
 // ---------------- SHOP (shop.html) ----------------
 const cart = {
   items: [],
@@ -109,7 +138,7 @@ function cartTotalQty() {
 }
 
 function cartSubtotal() {
-  return cart.items.reduce((a, it) => a + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+  return cart.items.reduce((a, it) => a + getCartUnitPrice(it) * (Number(it.qty) || 0), 0);
 }
 
 function getCartItemKey(id, selectedSize = "") {
@@ -123,23 +152,32 @@ function findCartItem(id, selectedSize = "") {
 }
 
 function addToCart(prod, qty, selectedSize = "") {
-  const q = clampInt(qty, 1);
+  if (prod?.sold_out === true) {
+    alert("This item is currently sold out.");
+    return;
+  }
+
+  const minQty = getMinQtyForProduct(prod);
+  const q = clampInt(qty, minQty);
   const cleanSize = String(selectedSize || "").trim();
   const existing = findCartItem(prod.id, cleanSize);
 
-  if (existing) existing.qty = clampInt((existing.qty || 0) + q, 1);
-  else {
+  if (existing) {
+    existing.qty = clampInt((existing.qty || 0) + q, minQty);
+    existing.price = getUnitPriceForProduct(prod, existing.qty);
+  } else {
     cart.items.push({
       id: prod.id,
       cart_key: getCartItemKey(prod.id, cleanSize),
       name: prod.name,
-      price: Number(prod.price) || 0,
+      price: getUnitPriceForProduct(prod, q),
       code: prod.code || "",
       sku: prod.sku || "",
       category: prod.category || "",
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q,
-      selected_size: cleanSize
+      selected_size: cleanSize,
+      sold_out: prod.sold_out === true
     });
   }
 
@@ -269,8 +307,7 @@ function initShop() {
     }
 
     currentProducts = (data || [])
-      .filter(p => (p.status || "active") === "active")
-      .filter(p => p.sold_out !== true);
+      .filter(p => (p.status || "active") === "active");
 
     renderProducts(currentProducts, activeFilter);
   }
@@ -285,16 +322,25 @@ function initShop() {
 
     filtered.forEach(prod => {
       const img = toCDN((prod.images && prod.images[0]) || prod.image_url || "");
+      const isSoldOut = prod.sold_out === true;
       const card = document.createElement("div");
-      card.className = "card";
+      card.className = "card" + (isSoldOut ? " is-soldout" : "");
       card.innerHTML = `
-        <img class="card__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(img)}" alt="${escapeHtmlAttr(prod.name || "")}" onerror="this.style.opacity=.2" />
+        <div class="imgWrap">
+          <img class="card__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(img)}" alt="${escapeHtmlAttr(prod.name || "")}" onerror="this.style.opacity=.2" />
+          ${isSoldOut ? `
+            <div class="soldBadge">SOLD OUT</div>
+            <div class="soldOverlay"><div class="soldCenter">UNAVAILABLE</div></div>
+          ` : ""}
+        </div>
         <div class="card__body">
           <div class="card__name">${escapeHtml(prod.name || "")}</div>
-          <div class="card__price">${money(prod.price)}</div>
+          <div class="card__price">${isSoldOut ? "Sold Out" : money(getUnitPriceForProduct(prod, getMinQtyForProduct(prod)))}</div>
         </div>
       `;
-      card.addEventListener("click", () => openProductModal(prod));
+      if (!isSoldOut) {
+        card.addEventListener("click", () => openProductModal(prod));
+      }
       grid.appendChild(card);
     });
   }
@@ -316,9 +362,45 @@ function initShop() {
   const pPlus = $("#pPlus");
   const pQty = $("#pQty");
   const pAddBtn = $("#pAddBtn");
+  let pWholesaleBox = null;
 
   let currentProd = null;
   let selectedSize = "";
+
+
+  function ensureWholesaleBox() {
+    if (pWholesaleBox) return pWholesaleBox;
+    const meta = document.querySelector('.pview__meta');
+    if (!meta) return null;
+    pWholesaleBox = document.createElement('div');
+    pWholesaleBox.className = 'wholesalePricing';
+    meta.insertAdjacentElement('afterend', pWholesaleBox);
+    return pWholesaleBox;
+  }
+
+  function updateWholesalePricingUI() {
+    const box = ensureWholesaleBox();
+    if (!box || !currentProd) return;
+
+    if (!isTankTopCategory(currentProd.category)) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+
+    const q = clampInt(pQty?.value || 10, 10);
+    const price = getTankTopPrice(q);
+    currentProd.price = price;
+    if (pPrice) pPrice.textContent = `${money(price)} / pc`;
+
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="wholesalePricing__title">Wholesale Pricing</div>
+      <div class="wholesalePricing__row ${q <= 15 ? 'is-active' : ''}"><span>10–15 pcs</span><strong>₱65 each</strong></div>
+      <div class="wholesalePricing__row ${q >= 16 && q <= 25 ? 'is-active' : ''}"><span>16–25 pcs</span><strong>₱50 each</strong></div>
+      <div class="wholesalePricing__row ${q >= 26 ? 'is-active' : ''}"><span>26+ pcs</span><strong>₱45 each</strong></div>
+    `;
+  }
 
   function renderSizeOptions(prod) {
     const sizes = Array.isArray(prod?.sizes) ? prod.sizes : [];
@@ -379,14 +461,26 @@ function initShop() {
     });
 
     pName.textContent = currentProd.name;
-    pPrice.textContent = money(currentProd.price);
+    pPrice.textContent = isTankTopCategory(currentProd.category)
+      ? `${money(getTankTopPrice(getMinQtyForProduct(currentProd)))} / pc`
+      : money(currentProd.price);
     pCategory.textContent = currentProd.category || "";
     pSku.textContent = currentProd.sku || "";
     pCode.textContent = currentProd.code || "";
 
     renderSizeOptions(currentProd);
-    pQty.value = "1";
+    pQty.value = String(getMinQtyForProduct(currentProd));
+    updateWholesalePricingUI();
     syncAddBtn();
+
+    if (currentProd.sold_out === true) {
+      pAddBtn.textContent = "SOLD OUT";
+      pAddBtn.disabled = true;
+      pAddBtn.classList.add("is-disabled");
+    } else {
+      pAddBtn.disabled = false;
+      pAddBtn.classList.remove("is-disabled");
+    }
 
     modal.classList.add("is-open");
     modal.setAttribute("aria-hidden", "false");
@@ -407,31 +501,51 @@ function initShop() {
   });
 
   function syncAddBtn() {
-    const q = clampInt(pQty.value, 1);
+    if (!currentProd) return;
+    if (currentProd.sold_out === true) {
+      pAddBtn.textContent = "SOLD OUT";
+      pAddBtn.disabled = true;
+      pAddBtn.classList.add("is-disabled");
+      return;
+    }
+    const minQty = getMinQtyForProduct(currentProd);
+    const q = clampInt(pQty.value, minQty);
+    pQty.value = String(q);
+    currentProd.price = getUnitPriceForProduct(currentProd, q);
+    if (pPrice) pPrice.textContent = isTankTopCategory(currentProd.category) ? `${money(currentProd.price)} / pc` : money(currentProd.price);
+    updateWholesalePricingUI();
     pAddBtn.textContent = `ADD ${q} TO CART`;
   }
 
   pQty.addEventListener("input", () => {
     if (!pQty.value) return syncAddBtn();
-    const q = clampInt(pQty.value, 1);
+    const minQty = getMinQtyForProduct(currentProd);
+    const q = clampInt(pQty.value, minQty);
     pQty.value = String(q);
     syncAddBtn();
   });
 
   pMinus.addEventListener("click", () => {
-    const q = clampInt(pQty.value, 1);
-    pQty.value = String(Math.max(1, q - 1));
+    const minQty = getMinQtyForProduct(currentProd);
+    const q = clampInt(pQty.value, minQty);
+    pQty.value = String(Math.max(minQty, q - 1));
     syncAddBtn();
   });
 
   pPlus.addEventListener("click", () => {
-    const q = clampInt(pQty.value, 1);
+    const minQty = getMinQtyForProduct(currentProd);
+    const q = clampInt(pQty.value, minQty);
     pQty.value = String(q + 1);
     syncAddBtn();
   });
 
   pAddBtn.addEventListener("click", () => {
     if (!currentProd) return;
+
+    if (currentProd.sold_out === true) {
+      alert("This item is currently sold out.");
+      return;
+    }
 
     if (Array.isArray(currentProd.sizes) && currentProd.sizes.length && !selectedSize) {
       if (pSizeError) {
@@ -441,7 +555,8 @@ function initShop() {
       return;
     }
 
-    const q = clampInt(pQty.value, 1);
+    const q = clampInt(pQty.value, getMinQtyForProduct(currentProd));
+    currentProd.price = getUnitPriceForProduct(currentProd, q);
     addToCart(currentProd, q, selectedSize);
     updateCartUI();
     closeProductModal();
@@ -462,7 +577,8 @@ function normalizeProduct(p) {
     category: p.category || "Earrings",
     image_url: p.image_url || "",
     images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
-    sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : []
+    sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : [],
+    sold_out: p.sold_out === true
   };
 }
 
@@ -513,8 +629,31 @@ function wireCartUI() {
   const checkoutCloseEls = $$("[data-close-checkout='1']", checkoutModal);
   const copyBtn = $("#copyOrderBtn");
 
-  checkoutBtn?.addEventListener("click", () => {
+  checkoutBtn?.addEventListener("click", async () => {
     if (!cart.items.length) return;
+
+    const sb = getSupabase();
+    if (sb) {
+      const ids = cart.items.map((it) => it.id).filter(Boolean);
+      if (ids.length) {
+        const { data, error } = await sb.from("products").select("id,sold_out,status").in("id", ids);
+        if (!error && Array.isArray(data)) {
+          const unavailable = new Set(
+            data
+              .filter((p) => p.sold_out === true || (p.status && p.status !== "active"))
+              .map((p) => String(p.id))
+          );
+          if (unavailable.size) {
+            cart.items = cart.items.filter((it) => !unavailable.has(String(it.id)));
+            saveCart();
+            updateCartUI();
+            alert("Some items are no longer available and were removed from your cart.");
+            return;
+          }
+        }
+      }
+    }
+
     refreshOrderText();
     
     // --- FIX: Close the cart drawer so the modal is visible ---
@@ -599,7 +738,7 @@ function wireCartUI() {
         lines.push(`• ${sizeLabel} – x${qty}`);
 
         catQty += qty;
-        catAmount += (Number(it.price) || 0) * qty;
+        catAmount += getCartUnitPrice(it) * qty;
       });
 
       lines.push(`Category Qty: ${catQty}`);
@@ -656,7 +795,7 @@ function updateCartUI() {
             <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" />
             <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}">+</button>
           </div>
-          <div style="color:rgba(255,255,255,.75);font-weight:700;">${money((Number(it.price)||0) * (Number(it.qty)||0))}</div>
+          <div style="color:rgba(255,255,255,.75);font-weight:700;">${money(getCartUnitPrice(it) * (Number(it.qty)||0))}</div>
         </div>
       </div>
       <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" aria-label="Remove item">🗑</button>
@@ -670,7 +809,9 @@ function updateCartUI() {
       const key = btn.getAttribute("data-dec");
       const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
-      item.qty = Math.max(1, clampInt(item.qty, 1) - 1);
+      const minQty = getMinQtyForProduct(item);
+      item.qty = Math.max(minQty, clampInt(item.qty, minQty) - 1);
+      item.price = getCartUnitPrice(item);
       saveCart(); updateCartUI();
     });
   });
@@ -680,7 +821,9 @@ function updateCartUI() {
       const key = btn.getAttribute("data-inc");
       const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
-      item.qty = clampInt(item.qty, 1) + 1;
+      const minQty = getMinQtyForProduct(item);
+      item.qty = clampInt(item.qty, minQty) + 1;
+      item.price = getCartUnitPrice(item);
       saveCart(); updateCartUI();
     });
   });
@@ -690,7 +833,9 @@ function updateCartUI() {
       const key = inp.getAttribute("data-qty");
       const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
       if (!item) return;
-      item.qty = clampInt(inp.value, 1);
+      const minQty = getMinQtyForProduct(item);
+      item.qty = clampInt(inp.value, minQty);
+      item.price = getCartUnitPrice(item);
       saveCart(); updateCartUI();
     });
   });
@@ -962,12 +1107,29 @@ function initAdmin() {
               </div>
             </div>
             <div class="adminItem__btns">
+              <button class="btn btn--ghost" type="button" data-toggle-sold="${escapeHtmlAttr(p.id)}" data-sold="${p.sold_out ? '1' : '0'}">${p.sold_out ? 'Mark Available' : 'Mark Sold Out'}</button>
               <button class="btn btn--ghost" type="button" data-del="${escapeHtmlAttr(p.id)}">Delete</button>
             </div>
           </div>
         </div>
       `;
     }).join('');
+
+
+    adminProducts.querySelectorAll('button[data-toggle-sold]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-toggle-sold');
+        const current = btn.getAttribute('data-sold') === '1';
+        setMsg(current ? 'Marking as available…' : 'Marking as sold out…');
+        const { error: updErr } = await sb.from('products').update({ sold_out: !current }).eq('id', id);
+        if (updErr) {
+          setMsg(`Update failed: ${updErr.message}`, true);
+        } else {
+          setMsg(!current ? 'Marked sold out ✅' : 'Marked available ✅');
+          loadAdminProducts();
+        }
+      });
+    });
 
     adminProducts.querySelectorAll('button[data-del]').forEach((btn) => {
       btn.addEventListener('click', async () => {
