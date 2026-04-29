@@ -1024,3 +1024,92 @@ html, body {
   color:#fff;
   font-weight:900;
 }
+
+/* ---------------- Mobile Modal Fix (Tank Top Pricing Scroll) ---------------- */
+@media (max-width: 520px){
+  .modal.is-open{
+    display:block;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    padding:12px 0 28px;
+  }
+
+  .modal__backdrop{
+    position:fixed;
+  }
+
+  .modal__panel{
+    position:relative;
+    left:auto;
+    top:auto;
+    transform:none;
+    width:calc(100vw - 20px);
+    max-width:none;
+    max-height:none;
+    margin:12px auto 34px;
+    padding:12px;
+  }
+
+  .pview{
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+
+  .pview__main{
+    max-height:40vh;
+    width:100%;
+    object-fit:contain;
+    background:#0a0a0a;
+  }
+
+  .pview__thumbs{
+    gap:6px;
+    margin-top:8px;
+  }
+
+  .thumb{
+    width:46px;
+    height:46px;
+  }
+
+  .pview__name{
+    font-size:30px;
+    line-height:1.05;
+    word-break:break-word;
+  }
+
+  .pview__price{
+    font-size:18px;
+  }
+
+  .pview__meta{
+    font-size:14px;
+    line-height:1.55;
+  }
+
+  .qtyRow{
+    grid-template-columns:44px 1fr 44px;
+    gap:8px;
+    margin-top:14px;
+  }
+
+  .qtyRow .btn,
+  #pAddBtn{
+    grid-column:1 / -1;
+    width:100%;
+  }
+
+  .wholesalePricing{
+    margin-top:14px;
+    padding:12px;
+  }
+
+  .wholesalePricing__title{
+    font-size:10px;
+  }
+
+  .wholesalePricing__row{
+    font-size:13px;
+    padding:8px 0;
+  }
+}
