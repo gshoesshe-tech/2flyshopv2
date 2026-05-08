@@ -87,14 +87,43 @@ function isTankTopCategory(category = "") {
 }
 
 function getTankTopPrice(qty) {
-  const q = clampInt(qty, 10);
+  const q = clampInt(qty, 1);
   if (q >= 26) return 45;
   if (q >= 16) return 50;
   return 65;
 }
 
 function getMinQtyForProduct(prod) {
-  return isTankTopCategory(prod?.category) ? 10 : 1;
+  return 1;
+}
+
+function getTotalTankTopQty(extraQty = 0) {
+  return cart.items
+    .filter((item) => isTankTopCategory(item?.category))
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0) + (Number(extraQty) || 0);
+}
+
+function getProjectedTankTopPrice(prod, qty) {
+  if (!isTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
+  const cleanSize = String(prod?.selected_size || '').trim();
+  const productId = prod?.id;
+  const existing = productId ? findCartItem(productId, cleanSize) : null;
+  const existingQty = existing ? Number(existing.qty) || 0 : 0;
+  const currentCartTankQty = getTotalTankTopQty();
+  const projectedTotalQty = currentCartTankQty - existingQty + existingQty + (Number(qty) || 0);
+  return getTankTopPrice(projectedTotalQty);
+}
+
+function syncTankTopCartPricing() {
+  const tankItems = cart.items.filter((item) => isTankTopCategory(item?.category));
+  if (!tankItems.length) return;
+
+  const totalTankQty = tankItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const tierPrice = getTankTopPrice(totalTankQty);
+
+  tankItems.forEach((item) => {
+    item.price = tierPrice;
+  });
 }
 
 function getUnitPriceForProduct(prod, qty) {
@@ -103,7 +132,10 @@ function getUnitPriceForProduct(prod, qty) {
 }
 
 function getCartUnitPrice(item) {
-  if (isTankTopCategory(item?.category)) return getTankTopPrice(Number(item?.qty) || 10);
+  if (isTankTopCategory(item?.category)) {
+    const totalTankQty = getTotalTankTopQty();
+    return Number(item?.price) || getTankTopPrice(totalTankQty || Number(item?.qty) || 1);
+  }
   return Number(item?.price) || 0;
 }
 
@@ -124,6 +156,7 @@ function loadCart() {
         cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
       };
     });
+    syncTankTopCartPricing();
   } catch {
     cart.items = [];
   }
@@ -181,6 +214,7 @@ function addToCart(prod, qty, selectedSize = "") {
     });
   }
 
+  syncTankTopCartPricing();
   saveCart();
 }
 
@@ -388,17 +422,21 @@ function initShop() {
       return;
     }
 
-    const q = clampInt(pQty?.value || 10, 10);
-    const price = getTankTopPrice(q);
+    const q = clampInt(pQty?.value || 1, 1);
+    const existing = currentProd ? findCartItem(currentProd.id, selectedSize) : null;
+    const existingQty = existing ? Number(existing.qty) || 0 : 0;
+    const projectedTotalQty = Math.max(1, getTotalTankTopQty() - existingQty + existingQty + q);
+    const price = getTankTopPrice(projectedTotalQty);
     currentProd.price = price;
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     box.hidden = false;
     box.innerHTML = `
       <div class="wholesalePricing__title">Wholesale Pricing</div>
-      <div class="wholesalePricing__row ${q <= 15 ? 'is-active' : ''}"><span>10–15 pcs</span><strong>₱65 each</strong></div>
-      <div class="wholesalePricing__row ${q >= 16 && q <= 25 ? 'is-active' : ''}"><span>16–25 pcs</span><strong>₱50 each</strong></div>
-      <div class="wholesalePricing__row ${q >= 26 ? 'is-active' : ''}"><span>26+ pcs</span><strong>₱45 each</strong></div>
+      <div class="wholesalePricing__row ${projectedTotalQty <= 15 ? 'is-active' : ''}"><span>1–15 total pcs</span><strong>₱65 each</strong></div>
+      <div class="wholesalePricing__row ${projectedTotalQty >= 16 && projectedTotalQty <= 25 ? 'is-active' : ''}"><span>16–25 total pcs</span><strong>₱50 each</strong></div>
+      <div class="wholesalePricing__row ${projectedTotalQty >= 26 ? 'is-active' : ''}"><span>26+ total pcs</span><strong>₱45 each</strong></div>
+      <div class="wholesalePricing__note">Tier is based on all tank tops in cart. Current total after adding: ${projectedTotalQty} pcs</div>
     `;
   }
 
@@ -462,7 +500,7 @@ function initShop() {
 
     pName.textContent = currentProd.name;
     pPrice.textContent = isTankTopCategory(currentProd.category)
-      ? `${money(getTankTopPrice(getMinQtyForProduct(currentProd)))} / pc`
+      ? `${money(getTankTopPrice(Math.max(1, getTotalTankTopQty(getMinQtyForProduct(currentProd)))))} / pc`
       : money(currentProd.price);
     pCategory.textContent = currentProd.category || "";
     pSku.textContent = currentProd.sku || "";
@@ -511,7 +549,7 @@ function initShop() {
     const minQty = getMinQtyForProduct(currentProd);
     const q = clampInt(pQty.value, minQty);
     pQty.value = String(q);
-    currentProd.price = getUnitPriceForProduct(currentProd, q);
+    currentProd.price = isTankTopCategory(currentProd.category) ? getProjectedTankTopPrice(currentProd, q) : getUnitPriceForProduct(currentProd, q);
     if (pPrice) pPrice.textContent = isTankTopCategory(currentProd.category) ? `${money(currentProd.price)} / pc` : money(currentProd.price);
     updateWholesalePricingUI();
     pAddBtn.textContent = `ADD ${q} TO CART`;
@@ -556,7 +594,8 @@ function initShop() {
     }
 
     const q = clampInt(pQty.value, getMinQtyForProduct(currentProd));
-    currentProd.price = getUnitPriceForProduct(currentProd, q);
+    currentProd.selected_size = selectedSize;
+    currentProd.price = isTankTopCategory(currentProd.category) ? getProjectedTankTopPrice(currentProd, q) : getUnitPriceForProduct(currentProd, q);
     addToCart(currentProd, q, selectedSize);
     updateCartUI();
     closeProductModal();
@@ -695,6 +734,9 @@ function wireCartUI() {
   });
 
   function refreshOrderText() {
+    syncTankTopCartPricing();
+    saveCart();
+
     const name = ($("#cName")?.value || "").trim();
     const phone = ($("#cPhone")?.value || "").trim();
     const address = ($("#cAddress")?.value || "").trim();
@@ -759,6 +801,9 @@ function wireCartUI() {
 }
 
 function updateCartUI() {
+  syncTankTopCartPricing();
+  saveCart();
+
   const count = $("#cartCount");
   const itemsWrap = $("#cartItems");
   const subtotalEl = $("#cartSubtotal");
