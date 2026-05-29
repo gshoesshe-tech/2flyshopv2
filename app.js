@@ -81,9 +81,37 @@ function initLanding() {
 
 
 // ---------------- SOLD OUT + WHOLESALE PRICING HELPERS ----------------
+function normalizeCategoryName(category = "") {
+  const raw = String(category || "").trim();
+  if (!raw) return "UNCATEGORIZED";
+
+  const c = raw.toUpperCase().replace(/\s+/g, " ");
+
+  if (c.includes("TANK")) return "TANK TOPS";
+  if (c.includes("BOXER")) return "BOXERS";
+  if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
+  if (c.includes("CRYSTAL") && c.includes("CASE")) return "CRYSTAL CASE";
+  if (c.includes("SKULL") && c.includes("CAP")) return "SKULL CAPS";
+  if (c.includes("CLOSE") && c.includes("CAP")) return "CLOSE CAPS";
+  if (c.includes("FITTED") && c.includes("TEE")) return "FITTED TEES";
+  if (c.includes("JACKET")) return "JACKETS";
+  if (c.includes("POD")) return "PODS";
+  if (c.includes("PRO CLUB")) return "PRO CLUB";
+  if (c.includes("RING")) return "RINGS";
+
+  return c;
+}
+
 function isTankTopCategory(category = "") {
-  const c = String(category || "").trim().toUpperCase();
-  return c === "TANK TOPS" || c === "TANK TOP" || c.includes("TANK");
+  return normalizeCategoryName(category) === "TANK TOPS";
+}
+
+function isBoxerCategory(category = "") {
+  return normalizeCategoryName(category) === "BOXERS";
+}
+
+function isEarringCategory(category = "") {
+  return normalizeCategoryName(category) === "EARRINGS";
 }
 
 function getTankTopPrice(qty) {
@@ -93,49 +121,119 @@ function getTankTopPrice(qty) {
   return 65;
 }
 
-function getMinQtyForProduct(prod) {
-  return 1;
+function getBoxerPrice(qty) {
+  const q = clampInt(qty, 10);
+  if (q >= 1000) return 30;
+  if (q >= 500) return 31;
+  if (q >= 100) return 33;
+  return 35;
+}
+
+function getEarringPrice(qty) {
+  const q = clampInt(qty, 10);
+  if (q >= 100) return 15;
+  return 18;
 }
 
 function getTotalTankTopQty(extraQty = 0) {
-  return cart.items
+  const current = cart.items
     .filter((item) => isTankTopCategory(item?.category))
-    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0) + (Number(extraQty) || 0);
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return current + (Number(extraQty) || 0);
+}
+
+function getTotalBoxerQty(extraQty = 0) {
+  const current = cart.items
+    .filter((item) => isBoxerCategory(item?.category))
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return current + (Number(extraQty) || 0);
+}
+
+function getTotalEarringQty(extraQty = 0) {
+  const current = cart.items
+    .filter((item) => isEarringCategory(item?.category))
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return current + (Number(extraQty) || 0);
 }
 
 function getProjectedTankTopPrice(prod, qty) {
   if (!isTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
-  const cleanSize = String(prod?.selected_size || '').trim();
-  const productId = prod?.id;
-  const existing = productId ? findCartItem(productId, cleanSize) : null;
-  const existingQty = existing ? Number(existing.qty) || 0 : 0;
-  const currentCartTankQty = getTotalTankTopQty();
-  const projectedTotalQty = currentCartTankQty - existingQty + existingQty + (Number(qty) || 0);
-  return getTankTopPrice(projectedTotalQty);
+  return getTankTopPrice(getTotalTankTopQty(qty));
+}
+
+function getProjectedBoxerPrice(prod, qty) {
+  if (!isBoxerCategory(prod?.category)) return Number(prod?.price) || 0;
+  return getBoxerPrice(getTotalBoxerQty(qty));
+}
+
+function getProjectedEarringPrice(prod, qty) {
+  if (!isEarringCategory(prod?.category)) return Number(prod?.price) || 0;
+  return getEarringPrice(getTotalEarringQty(qty));
 }
 
 function syncTankTopCartPricing() {
   const tankItems = cart.items.filter((item) => isTankTopCategory(item?.category));
   if (!tankItems.length) return;
 
-  const totalTankQty = tankItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const tierPrice = getTankTopPrice(totalTankQty);
+  const totalQty = tankItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const price = getTankTopPrice(totalQty);
 
   tankItems.forEach((item) => {
-    item.price = tierPrice;
+    item.category = normalizeCategoryName(item.category);
+    item.price = price;
   });
 }
 
+function syncBoxerCartPricing() {
+  const boxerItems = cart.items.filter((item) => isBoxerCategory(item?.category));
+  if (!boxerItems.length) return;
+
+  const totalQty = boxerItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const price = getBoxerPrice(totalQty);
+
+  boxerItems.forEach((item) => {
+    item.category = normalizeCategoryName(item.category);
+    item.price = price;
+  });
+}
+
+function syncEarringCartPricing() {
+  const earringItems = cart.items.filter((item) => isEarringCategory(item?.category));
+  if (!earringItems.length) return;
+
+  const totalQty = earringItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const price = getEarringPrice(totalQty);
+
+  earringItems.forEach((item) => {
+    item.category = normalizeCategoryName(item.category);
+    item.price = price;
+  });
+}
+
+function syncCartWholesalePricing() {
+  if (!cart || !Array.isArray(cart.items)) return;
+  syncTankTopCartPricing();
+  syncBoxerCartPricing();
+  syncEarringCartPricing();
+}
+
+function getMinQtyForProduct(prod) {
+  if (isBoxerCategory(prod?.category)) return 10;
+  if (isEarringCategory(prod?.category)) return 10;
+  return 1;
+}
+
 function getUnitPriceForProduct(prod, qty) {
-  if (isTankTopCategory(prod?.category)) return getTankTopPrice(qty);
+  if (isTankTopCategory(prod?.category)) return getProjectedTankTopPrice(prod, qty);
+  if (isBoxerCategory(prod?.category)) return getProjectedBoxerPrice(prod, qty);
+  if (isEarringCategory(prod?.category)) return getProjectedEarringPrice(prod, qty);
   return Number(prod?.price) || 0;
 }
 
 function getCartUnitPrice(item) {
-  if (isTankTopCategory(item?.category)) {
-    const totalTankQty = getTotalTankTopQty();
-    return Number(item?.price) || getTankTopPrice(totalTankQty || Number(item?.qty) || 1);
-  }
+  if (isTankTopCategory(item?.category)) return getTankTopPrice(getTotalTankTopQty());
+  if (isBoxerCategory(item?.category)) return getBoxerPrice(getTotalBoxerQty());
+  if (isEarringCategory(item?.category)) return getEarringPrice(getTotalEarringQty());
   return Number(item?.price) || 0;
 }
 
@@ -152,17 +250,20 @@ function loadCart() {
       const selectedSize = String(it?.selected_size || "").trim();
       return {
         ...it,
+        category: normalizeCategoryName(it?.category || ""),
         selected_size: selectedSize,
         cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
       };
     });
-    syncTankTopCartPricing();
+    syncCartWholesalePricing();
+    localStorage.setItem("cart_v1", JSON.stringify(cart.items));
   } catch {
     cart.items = [];
   }
 }
 
 function saveCart() {
+  syncCartWholesalePricing();
   localStorage.setItem("cart_v1", JSON.stringify(cart.items));
 }
 
@@ -171,6 +272,7 @@ function cartTotalQty() {
 }
 
 function cartSubtotal() {
+  syncCartWholesalePricing();
   return cart.items.reduce((a, it) => a + getCartUnitPrice(it) * (Number(it.qty) || 0), 0);
 }
 
@@ -194,19 +296,20 @@ function addToCart(prod, qty, selectedSize = "") {
   const q = clampInt(qty, minQty);
   const cleanSize = String(selectedSize || "").trim();
   const existing = findCartItem(prod.id, cleanSize);
+  const normalizedCategory = normalizeCategoryName(prod.category || "");
 
   if (existing) {
+    existing.category = normalizedCategory;
     existing.qty = clampInt((existing.qty || 0) + q, minQty);
-    existing.price = getUnitPriceForProduct(prod, existing.qty);
   } else {
     cart.items.push({
       id: prod.id,
       cart_key: getCartItemKey(prod.id, cleanSize),
       name: prod.name,
-      price: getUnitPriceForProduct(prod, q),
+      price: Number(prod.price) || 0,
       code: prod.code || "",
       sku: prod.sku || "",
-      category: prod.category || "",
+      category: normalizedCategory,
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q,
       selected_size: cleanSize,
@@ -214,7 +317,7 @@ function addToCart(prod, qty, selectedSize = "") {
     });
   }
 
-  syncTankTopCartPricing();
+  syncCartWholesalePricing();
   saveCart();
 }
 
@@ -416,27 +519,60 @@ function initShop() {
     const box = ensureWholesaleBox();
     if (!box || !currentProd) return;
 
-    if (!isTankTopCategory(currentProd.category)) {
+    const minQty = getMinQtyForProduct(currentProd);
+    const q = clampInt(pQty?.value || minQty, minQty);
+    const isTank = isTankTopCategory(currentProd.category);
+    const isBoxer = isBoxerCategory(currentProd.category);
+    const isEarring = isEarringCategory(currentProd.category);
+
+    if (!isTank && !isBoxer && !isEarring) {
       box.hidden = true;
       box.innerHTML = '';
       return;
     }
 
-    const q = clampInt(pQty?.value || 1, 1);
-    const existing = currentProd ? findCartItem(currentProd.id, selectedSize) : null;
-    const existingQty = existing ? Number(existing.qty) || 0 : 0;
-    const projectedTotalQty = Math.max(1, getTotalTankTopQty() - existingQty + existingQty + q);
-    const price = getTankTopPrice(projectedTotalQty);
+    let price = 0;
+    let projectedTotal = q;
+    let rows = '';
+
+    if (isTank) {
+      projectedTotal = getTotalTankTopQty(q);
+      price = getTankTopPrice(projectedTotal);
+      rows = `
+        <div class="wholesalePricing__row ${projectedTotal <= 15 ? 'is-active' : ''}"><span>1–15 total pcs</span><strong>₱65 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 16 && projectedTotal <= 25 ? 'is-active' : ''}"><span>16–25 total pcs</span><strong>₱50 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 26 ? 'is-active' : ''}"><span>26+ total pcs</span><strong>₱45 each</strong></div>
+      `;
+    }
+
+    if (isBoxer) {
+      projectedTotal = getTotalBoxerQty(q);
+      price = getBoxerPrice(projectedTotal);
+      rows = `
+        <div class="wholesalePricing__row ${projectedTotal >= 10 && projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱35 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱33 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 500 && projectedTotal <= 999 ? 'is-active' : ''}"><span>500–999 total pcs</span><strong>₱31 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 1000 ? 'is-active' : ''}"><span>1000+ total pcs</span><strong>₱30 each</strong></div>
+      `;
+    }
+
+    if (isEarring) {
+      projectedTotal = getTotalEarringQty(q);
+      price = getEarringPrice(projectedTotal);
+      rows = `
+        <div class="wholesalePricing__row ${projectedTotal >= 10 && projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱18 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱15 each</strong></div>
+      `;
+    }
+
     currentProd.price = price;
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     box.hidden = false;
     box.innerHTML = `
       <div class="wholesalePricing__title">Wholesale Pricing</div>
-      <div class="wholesalePricing__row ${projectedTotalQty <= 15 ? 'is-active' : ''}"><span>1–15 total pcs</span><strong>₱65 each</strong></div>
-      <div class="wholesalePricing__row ${projectedTotalQty >= 16 && projectedTotalQty <= 25 ? 'is-active' : ''}"><span>16–25 total pcs</span><strong>₱50 each</strong></div>
-      <div class="wholesalePricing__row ${projectedTotalQty >= 26 ? 'is-active' : ''}"><span>26+ total pcs</span><strong>₱45 each</strong></div>
-      <div class="wholesalePricing__note">Tier is based on all tank tops in cart. Current total after adding: ${projectedTotalQty} pcs</div>
+      ${rows}
+      <div class="wholesalePricing__note">Tier is based on all ${normalizeCategoryName(currentProd.category).toLowerCase()} in cart. Current total after adding: ${projectedTotal} pcs</div>
     `;
   }
 
@@ -499,8 +635,12 @@ function initShop() {
     });
 
     pName.textContent = currentProd.name;
-    pPrice.textContent = isTankTopCategory(currentProd.category)
-      ? `${money(getTankTopPrice(Math.max(1, getTotalTankTopQty(getMinQtyForProduct(currentProd)))))} / pc`
+    const isWholesaleProduct =
+      isTankTopCategory(currentProd.category) ||
+      isBoxerCategory(currentProd.category) ||
+      isEarringCategory(currentProd.category);
+    pPrice.textContent = isWholesaleProduct
+      ? `${money(getUnitPriceForProduct(currentProd, getMinQtyForProduct(currentProd)))} / pc`
       : money(currentProd.price);
     pCategory.textContent = currentProd.category || "";
     pSku.textContent = currentProd.sku || "";
@@ -549,8 +689,14 @@ function initShop() {
     const minQty = getMinQtyForProduct(currentProd);
     const q = clampInt(pQty.value, minQty);
     pQty.value = String(q);
-    currentProd.price = isTankTopCategory(currentProd.category) ? getProjectedTankTopPrice(currentProd, q) : getUnitPriceForProduct(currentProd, q);
-    if (pPrice) pPrice.textContent = isTankTopCategory(currentProd.category) ? `${money(currentProd.price)} / pc` : money(currentProd.price);
+    currentProd.price = getUnitPriceForProduct(currentProd, q);
+
+    const isWholesaleProduct =
+      isTankTopCategory(currentProd.category) ||
+      isBoxerCategory(currentProd.category) ||
+      isEarringCategory(currentProd.category);
+
+    if (pPrice) pPrice.textContent = isWholesaleProduct ? `${money(currentProd.price)} / pc` : money(currentProd.price);
     updateWholesalePricingUI();
     pAddBtn.textContent = `ADD ${q} TO CART`;
   }
@@ -594,8 +740,7 @@ function initShop() {
     }
 
     const q = clampInt(pQty.value, getMinQtyForProduct(currentProd));
-    currentProd.selected_size = selectedSize;
-    currentProd.price = isTankTopCategory(currentProd.category) ? getProjectedTankTopPrice(currentProd, q) : getUnitPriceForProduct(currentProd, q);
+    currentProd.price = getUnitPriceForProduct(currentProd, q);
     addToCart(currentProd, q, selectedSize);
     updateCartUI();
     closeProductModal();
@@ -613,7 +758,7 @@ function normalizeProduct(p) {
     price: Number(p.price) || 0,
     code: p.code || "",
     sku: p.sku || "",
-    category: p.category || "Earrings",
+    category: normalizeCategoryName(p.category || "Earrings"),
     image_url: p.image_url || "",
     images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
     sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : [],
@@ -734,9 +879,6 @@ function wireCartUI() {
   });
 
   function refreshOrderText() {
-    syncTankTopCartPricing();
-    saveCart();
-
     const name = ($("#cName")?.value || "").trim();
     const phone = ($("#cPhone")?.value || "").trim();
     const address = ($("#cAddress")?.value || "").trim();
@@ -753,11 +895,12 @@ function wireCartUI() {
     lines.push("Order List:");
     lines.push("");
 
-    // Group items by category
+    syncCartWholesalePricing();
+
+    // Group items by normalized category to prevent duplicate sections.
     const groups = new Map();
     cart.items.forEach(it => {
-      const raw = (it.category || "").trim();
-      const cat = raw ? raw : "Uncategorized";
+      const cat = normalizeCategoryName(it.category);
       if (!groups.has(cat)) groups.set(cat, []);
       groups.get(cat).push(it);
     });
@@ -801,9 +944,7 @@ function wireCartUI() {
 }
 
 function updateCartUI() {
-  syncTankTopCartPricing();
-  saveCart();
-
+  syncCartWholesalePricing();
   const count = $("#cartCount");
   const itemsWrap = $("#cartItems");
   const subtotalEl = $("#cartSubtotal");
@@ -856,7 +997,7 @@ function updateCartUI() {
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = Math.max(minQty, clampInt(item.qty, minQty) - 1);
-      item.price = getCartUnitPrice(item);
+      syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
   });
@@ -868,7 +1009,7 @@ function updateCartUI() {
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(item.qty, minQty) + 1;
-      item.price = getCartUnitPrice(item);
+      syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
   });
@@ -880,7 +1021,7 @@ function updateCartUI() {
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(inp.value, minQty);
-      item.price = getCartUnitPrice(item);
+      syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
   });
@@ -889,6 +1030,7 @@ function updateCartUI() {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-del");
       cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) !== String(key));
+      syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
   });
