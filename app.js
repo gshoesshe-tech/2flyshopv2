@@ -122,7 +122,7 @@ function getTankTopPrice(qty) {
 }
 
 function getBoxerPrice(qty) {
-  const q = clampInt(qty, 10);
+  const q = clampInt(qty, 1);
   if (q >= 1000) return 30;
   if (q >= 500) return 31;
   if (q >= 100) return 33;
@@ -130,7 +130,7 @@ function getBoxerPrice(qty) {
 }
 
 function getEarringPrice(qty) {
-  const q = clampInt(qty, 10);
+  const q = clampInt(qty, 1);
   if (q >= 100) return 15;
   return 18;
 }
@@ -218,8 +218,6 @@ function syncCartWholesalePricing() {
 }
 
 function getMinQtyForProduct(prod) {
-  if (isBoxerCategory(prod?.category)) return 10;
-  if (isEarringCategory(prod?.category)) return 10;
   return 1;
 }
 
@@ -549,7 +547,7 @@ function initShop() {
       projectedTotal = getTotalBoxerQty(q);
       price = getBoxerPrice(projectedTotal);
       rows = `
-        <div class="wholesalePricing__row ${projectedTotal >= 10 && projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱35 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱35 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱33 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 500 && projectedTotal <= 999 ? 'is-active' : ''}"><span>500–999 total pcs</span><strong>₱31 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 1000 ? 'is-active' : ''}"><span>1000+ total pcs</span><strong>₱30 each</strong></div>
@@ -560,7 +558,7 @@ function initShop() {
       projectedTotal = getTotalEarringQty(q);
       price = getEarringPrice(projectedTotal);
       rows = `
-        <div class="wholesalePricing__row ${projectedTotal >= 10 && projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱18 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱18 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱15 each</strong></div>
       `;
     }
