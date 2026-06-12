@@ -1,5 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
+   PATCH: 1PC_MIN_WHOLESALE_V3 - Pro Club sizes supported; earrings 100+=₱16, 500+=₱15
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -131,7 +132,8 @@ function getBoxerPrice(qty) {
 
 function getEarringPrice(qty) {
   const q = clampInt(qty, 1);
-  if (q >= 100) return 15;
+  if (q >= 500) return 15;
+  if (q >= 100) return 16;
   return 18;
 }
 
@@ -218,6 +220,7 @@ function syncCartWholesalePricing() {
 }
 
 function getMinQtyForProduct(prod) {
+  // All products can start at 1 pc. Wholesale discounts still apply by total cart quantity.
   return 1;
 }
 
@@ -559,7 +562,8 @@ function initShop() {
       price = getEarringPrice(projectedTotal);
       rows = `
         <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱18 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱15 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱16 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 500 ? 'is-active' : ''}"><span>500+ total pcs</span><strong>₱15 each</strong></div>
       `;
     }
 
@@ -645,7 +649,7 @@ function initShop() {
     pCode.textContent = currentProd.code || "";
 
     renderSizeOptions(currentProd);
-    pQty.value = String(getMinQtyForProduct(currentProd));
+    pQty.value = "1";
     updateWholesalePricingUI();
     syncAddBtn();
 
