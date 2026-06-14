@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: 1PC_MIN_WHOLESALE_V3 - Pro Club sizes supported; earrings 100+=₱16, 500+=₱15
+   PATCH: 1PC_MIN_WHOLESALE_V4 - Tank Tops ₱45 1–99, ₱40 100+; Pro Club sizes supported; earrings 100+=₱16, 500+=₱15
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -117,9 +117,8 @@ function isEarringCategory(category = "") {
 
 function getTankTopPrice(qty) {
   const q = clampInt(qty, 1);
-  if (q >= 26) return 45;
-  if (q >= 16) return 50;
-  return 65;
+  if (q >= 100) return 40;
+  return 45;
 }
 
 function getBoxerPrice(qty) {
@@ -540,9 +539,8 @@ function initShop() {
       projectedTotal = getTotalTankTopQty(q);
       price = getTankTopPrice(projectedTotal);
       rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 15 ? 'is-active' : ''}"><span>1–15 total pcs</span><strong>₱65 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 16 && projectedTotal <= 25 ? 'is-active' : ''}"><span>16–25 total pcs</span><strong>₱50 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 26 ? 'is-active' : ''}"><span>26+ total pcs</span><strong>₱45 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱45 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱40 each</strong></div>
       `;
     }
 
