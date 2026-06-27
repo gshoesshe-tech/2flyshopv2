@@ -88,7 +88,10 @@ function normalizeCategoryName(category = "") {
 
   const c = raw.toUpperCase().replace(/\s+/g, " ");
 
-  if (c.includes("TANK")) return "TANK TOPS";
+  // Only the plain tank top category should use the TANK TOPS wholesale pricing.
+  // Do NOT collapse categories like "NIKE TANK TOPS" or "PRO CLUB TANK TOPS" into "TANK TOPS".
+  // Give those products their own category so they use their own normal product price.
+  if (["TANK", "TANK TOP", "TANK TOPS", "PLAIN TANK", "PLAIN TANK TOP", "PLAIN TANK TOPS", "OG TANK", "OG TANK TOP", "OG TANK TOPS"].includes(c)) return "TANK TOPS";
   if (c.includes("BOXER")) return "BOXERS";
   if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
   if (c.includes("CRYSTAL") && c.includes("CASE")) return "CRYSTAL CASE";
