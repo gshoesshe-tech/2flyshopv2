@@ -88,9 +88,9 @@ function normalizeCategoryName(category = "") {
 
   const c = raw.toUpperCase().replace(/\s+/g, " ");
 
-  // Only the plain tank top category should use the TANK TOPS wholesale pricing.
-  // Do NOT collapse categories like "NIKE TANK TOPS" or "PRO CLUB TANK TOPS" into "TANK TOPS".
-  // Give those products their own category so they use their own normal product price.
+  // Keep each tank-top product line separate so one pricing group does not affect another.
+  if (["NIKE TANK TOP", "NIKE TANK TOPS"].includes(c)) return "NIKE TANK TOP";
+  if (["JORDAN TANK TOP", "JORDAN TANK TOPS"].includes(c)) return "JORDAN TANK TOP";
   if (["TANK", "TANK TOP", "TANK TOPS", "PLAIN TANK", "PLAIN TANK TOP", "PLAIN TANK TOPS", "OG TANK", "OG TANK TOP", "OG TANK TOPS"].includes(c)) return "TANK TOPS";
   if (c.includes("BOXER")) return "BOXERS";
   if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
@@ -110,6 +110,14 @@ function isTankTopCategory(category = "") {
   return normalizeCategoryName(category) === "TANK TOPS";
 }
 
+function isNikeTankTopCategory(category = "") {
+  return normalizeCategoryName(category) === "NIKE TANK TOP";
+}
+
+function isJordanTankTopCategory(category = "") {
+  return normalizeCategoryName(category) === "JORDAN TANK TOP";
+}
+
 function isBoxerCategory(category = "") {
   return normalizeCategoryName(category) === "BOXERS";
 }
@@ -122,6 +130,12 @@ function getTankTopPrice(qty) {
   const q = clampInt(qty, 1);
   if (q >= 100) return 40;
   return 45;
+}
+
+function getBrandedTankTopPrice(qty) {
+  const q = clampInt(qty, 10);
+  if (q >= 100) return 52;
+  return 60;
 }
 
 function getBoxerPrice(qty) {
@@ -146,6 +160,20 @@ function getTotalTankTopQty(extraQty = 0) {
   return current + (Number(extraQty) || 0);
 }
 
+function getTotalNikeTankTopQty(extraQty = 0) {
+  const current = cart.items
+    .filter((item) => isNikeTankTopCategory(item?.category))
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return current + (Number(extraQty) || 0);
+}
+
+function getTotalJordanTankTopQty(extraQty = 0) {
+  const current = cart.items
+    .filter((item) => isJordanTankTopCategory(item?.category))
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  return current + (Number(extraQty) || 0);
+}
+
 function getTotalBoxerQty(extraQty = 0) {
   const current = cart.items
     .filter((item) => isBoxerCategory(item?.category))
@@ -163,6 +191,16 @@ function getTotalEarringQty(extraQty = 0) {
 function getProjectedTankTopPrice(prod, qty) {
   if (!isTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
   return getTankTopPrice(getTotalTankTopQty(qty));
+}
+
+function getProjectedNikeTankTopPrice(prod, qty) {
+  if (!isNikeTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
+  return getBrandedTankTopPrice(getTotalNikeTankTopQty(qty));
+}
+
+function getProjectedJordanTankTopPrice(prod, qty) {
+  if (!isJordanTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
+  return getBrandedTankTopPrice(getTotalJordanTankTopQty(qty));
 }
 
 function getProjectedBoxerPrice(prod, qty) {
@@ -183,6 +221,32 @@ function syncTankTopCartPricing() {
   const price = getTankTopPrice(totalQty);
 
   tankItems.forEach((item) => {
+    item.category = normalizeCategoryName(item.category);
+    item.price = price;
+  });
+}
+
+function syncNikeTankTopCartPricing() {
+  const items = cart.items.filter((item) => isNikeTankTopCategory(item?.category));
+  if (!items.length) return;
+
+  const totalQty = items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const price = getBrandedTankTopPrice(totalQty);
+
+  items.forEach((item) => {
+    item.category = normalizeCategoryName(item.category);
+    item.price = price;
+  });
+}
+
+function syncJordanTankTopCartPricing() {
+  const items = cart.items.filter((item) => isJordanTankTopCategory(item?.category));
+  if (!items.length) return;
+
+  const totalQty = items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const price = getBrandedTankTopPrice(totalQty);
+
+  items.forEach((item) => {
     item.category = normalizeCategoryName(item.category);
     item.price = price;
   });
@@ -217,17 +281,22 @@ function syncEarringCartPricing() {
 function syncCartWholesalePricing() {
   if (!cart || !Array.isArray(cart.items)) return;
   syncTankTopCartPricing();
+  syncNikeTankTopCartPricing();
+  syncJordanTankTopCartPricing();
   syncBoxerCartPricing();
   syncEarringCartPricing();
 }
 
 function getMinQtyForProduct(prod) {
-  // All products can start at 1 pc. Wholesale discounts still apply by total cart quantity.
+  // Nike and Jordan Tank Tops have a 10-piece minimum. Other product rules stay unchanged.
+  if (isNikeTankTopCategory(prod?.category) || isJordanTankTopCategory(prod?.category)) return 10;
   return 1;
 }
 
 function getUnitPriceForProduct(prod, qty) {
   if (isTankTopCategory(prod?.category)) return getProjectedTankTopPrice(prod, qty);
+  if (isNikeTankTopCategory(prod?.category)) return getProjectedNikeTankTopPrice(prod, qty);
+  if (isJordanTankTopCategory(prod?.category)) return getProjectedJordanTankTopPrice(prod, qty);
   if (isBoxerCategory(prod?.category)) return getProjectedBoxerPrice(prod, qty);
   if (isEarringCategory(prod?.category)) return getProjectedEarringPrice(prod, qty);
   return Number(prod?.price) || 0;
@@ -235,6 +304,8 @@ function getUnitPriceForProduct(prod, qty) {
 
 function getCartUnitPrice(item) {
   if (isTankTopCategory(item?.category)) return getTankTopPrice(getTotalTankTopQty());
+  if (isNikeTankTopCategory(item?.category)) return getBrandedTankTopPrice(getTotalNikeTankTopQty());
+  if (isJordanTankTopCategory(item?.category)) return getBrandedTankTopPrice(getTotalJordanTankTopQty());
   if (isBoxerCategory(item?.category)) return getBoxerPrice(getTotalBoxerQty());
   if (isEarringCategory(item?.category)) return getEarringPrice(getTotalEarringQty());
   return Number(item?.price) || 0;
@@ -525,10 +596,12 @@ function initShop() {
     const minQty = getMinQtyForProduct(currentProd);
     const q = clampInt(pQty?.value || minQty, minQty);
     const isTank = isTankTopCategory(currentProd.category);
+    const isNikeTank = isNikeTankTopCategory(currentProd.category);
+    const isJordanTank = isJordanTankTopCategory(currentProd.category);
     const isBoxer = isBoxerCategory(currentProd.category);
     const isEarring = isEarringCategory(currentProd.category);
 
-    if (!isTank && !isBoxer && !isEarring) {
+    if (!isTank && !isNikeTank && !isJordanTank && !isBoxer && !isEarring) {
       box.hidden = true;
       box.innerHTML = '';
       return;
@@ -544,6 +617,24 @@ function initShop() {
       rows = `
         <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱45 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱40 each</strong></div>
+      `;
+    }
+
+    if (isNikeTank) {
+      projectedTotal = getTotalNikeTankTopQty(q);
+      price = getBrandedTankTopPrice(projectedTotal);
+      rows = `
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱60 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
+      `;
+    }
+
+    if (isJordanTank) {
+      projectedTotal = getTotalJordanTankTopQty(q);
+      price = getBrandedTankTopPrice(projectedTotal);
+      rows = `
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱60 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
       `;
     }
 
@@ -640,6 +731,8 @@ function initShop() {
     pName.textContent = currentProd.name;
     const isWholesaleProduct =
       isTankTopCategory(currentProd.category) ||
+      isNikeTankTopCategory(currentProd.category) ||
+      isJordanTankTopCategory(currentProd.category) ||
       isBoxerCategory(currentProd.category) ||
       isEarringCategory(currentProd.category);
     pPrice.textContent = isWholesaleProduct
@@ -696,6 +789,8 @@ function initShop() {
 
     const isWholesaleProduct =
       isTankTopCategory(currentProd.category) ||
+      isNikeTankTopCategory(currentProd.category) ||
+      isJordanTankTopCategory(currentProd.category) ||
       isBoxerCategory(currentProd.category) ||
       isEarringCategory(currentProd.category);
 
