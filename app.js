@@ -134,7 +134,8 @@ function getTankTopPrice(qty) {
 
 function getBrandedTankTopPrice(qty) {
   const q = clampInt(qty, 1);
-  if (q >= 100) return 52;
+  if (q >= 500) return 52;
+  if (q >= 100) return 55;
   return 60;
 }
 
@@ -624,7 +625,8 @@ function initShop() {
       price = getBrandedTankTopPrice(projectedTotal);
       rows = `
         <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱60 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱55 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 500 ? 'is-active' : ''}"><span>500+ total pcs</span><strong>₱52 each</strong></div>
       `;
     }
 
@@ -633,7 +635,8 @@ function initShop() {
       price = getBrandedTankTopPrice(projectedTotal);
       rows = `
         <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱60 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱55 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal >= 500 ? 'is-active' : ''}"><span>500+ total pcs</span><strong>₱52 each</strong></div>
       `;
     }
 
