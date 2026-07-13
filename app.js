@@ -133,7 +133,7 @@ function getTankTopPrice(qty) {
 }
 
 function getBrandedTankTopPrice(qty) {
-  const q = clampInt(qty, 10);
+  const q = clampInt(qty, 1);
   if (q >= 100) return 52;
   return 60;
 }
@@ -288,8 +288,7 @@ function syncCartWholesalePricing() {
 }
 
 function getMinQtyForProduct(prod) {
-  // Nike and Jordan Tank Tops have a 10-piece minimum. Other product rules stay unchanged.
-  if (isNikeTankTopCategory(prod?.category) || isJordanTankTopCategory(prod?.category)) return 10;
+  // All products, including Nike and Jordan Tank Tops, can be ordered from 1 piece.
   return 1;
 }
 
@@ -624,7 +623,7 @@ function initShop() {
       projectedTotal = getTotalNikeTankTopQty(q);
       price = getBrandedTankTopPrice(projectedTotal);
       rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱60 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱60 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
       `;
     }
@@ -633,7 +632,7 @@ function initShop() {
       projectedTotal = getTotalJordanTankTopQty(q);
       price = getBrandedTankTopPrice(projectedTotal);
       rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>10–99 total pcs</span><strong>₱60 each</strong></div>
+        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱60 each</strong></div>
         <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱52 each</strong></div>
       `;
     }
