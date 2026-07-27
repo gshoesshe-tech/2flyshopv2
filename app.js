@@ -670,10 +670,7 @@ function initShop() {
     });
 
     pName.textContent = currentProd.name;
-    const isWholesaleProduct =
-      isTankTopCategory(currentProd.category) ||
-      isStandardBoxerProduct(currentProd) ||
-      isEarringCategory(currentProd.category);
+    const isWholesaleProduct = Boolean(getPricingRule(currentProd));
     const openingRule = getPricingRule(currentProd);
     const openingPrice = openingRule
       ? getPricingGroupUnitPrice(inferPricingGroup(currentProd), getTotalPricingGroupQty(inferPricingGroup(currentProd), getMinQtyForProduct(currentProd)))
@@ -728,10 +725,7 @@ function initShop() {
     pQty.value = String(q);
     currentProd.price = getUnitPriceForProduct(currentProd, q);
 
-    const isWholesaleProduct =
-      isTankTopCategory(currentProd.category) ||
-      isStandardBoxerProduct(currentProd) ||
-      isEarringCategory(currentProd.category);
+    const isWholesaleProduct = Boolean(getPricingRule(currentProd));
 
     if (pPrice) pPrice.textContent = isWholesaleProduct ? `${money(currentProd.price)} / pc` : money(currentProd.price);
     updateWholesalePricingUI();
