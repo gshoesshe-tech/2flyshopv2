@@ -81,18 +81,94 @@ function initLanding() {
 
 
 
-// ---------------- SOLD OUT + WHOLESALE PRICING HELPERS ----------------
+// ---------------- SOLD OUT + DATA-DRIVEN WHOLESALE PRICING ----------------
+const PRICING_GROUPS = Object.freeze({
+  NONE: "NONE",
+  BOXERS_STANDARD: "BOXERS_STANDARD",
+  BOXERS_PREMIUM: "BOXERS_PREMIUM",
+  TANK_STANDARD: "TANK_STANDARD",
+  NIKE_TANK: "NIKE_TANK",
+  JORDAN_TANK: "JORDAN_TANK",
+  PATCH_TANK: "PATCH_TANK",
+  EARRINGS: "EARRINGS"
+});
+
+const PRICING_RULES = Object.freeze({
+  BOXERS_STANDARD: {
+    label: "Standard Boxers",
+    minimum: 1,
+    unit: "pcs",
+    tiers: [
+      { min: 1, max: 99, price: 35, label: "1–99 total pcs" },
+      { min: 100, max: 499, price: 33, label: "100–499 total pcs" },
+      { min: 500, max: 999, price: 31, label: "500–999 total pcs" },
+      { min: 1000, max: Infinity, price: 30, label: "1000+ total pcs" }
+    ]
+  },
+  BOXERS_PREMIUM: {
+    label: "Premium Boxers",
+    minimum: 1,
+    unit: "pcs",
+    tiers: [
+      { min: 1, max: 99, price: 45, label: "1–99 total pcs" },
+      { min: 100, max: 499, price: 40, label: "100–499 total pcs" },
+      { min: 500, max: Infinity, price: 38, label: "500+ total pcs" }
+    ]
+  },
+  TANK_STANDARD: {
+    label: "Plain Tank Tops",
+    minimum: 1,
+    unit: "pcs",
+    tiers: [
+      { min: 1, max: 99, price: 45, label: "1–99 total pcs" },
+      { min: 100, max: Infinity, price: 40, label: "100+ total pcs" }
+    ]
+  },
+  NIKE_TANK: {
+    label: "Nike Tank Tops",
+    minimum: 10,
+    unit: "pcs",
+    tiers: [
+      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
+    ]
+  },
+  JORDAN_TANK: {
+    label: "Jordan Tank Tops",
+    minimum: 10,
+    unit: "pcs",
+    tiers: [
+      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
+    ]
+  },
+  PATCH_TANK: {
+    label: "OG Tank Top w/ Patch",
+    minimum: 10,
+    unit: "pcs",
+    tiers: [
+      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
+    ]
+  },
+  EARRINGS: {
+    label: "Earrings",
+    minimum: 1,
+    unit: "pcs",
+    tiers: [
+      { min: 1, max: 99, price: 18, label: "1–99 total pcs" },
+      { min: 100, max: 499, price: 16, label: "100–499 total pcs" },
+      { min: 500, max: Infinity, price: 15, label: "500+ total pcs" }
+    ]
+  }
+});
+
 function normalizeCategoryName(category = "") {
   const raw = String(category || "").trim();
   if (!raw) return "UNCATEGORIZED";
-
   const c = raw.toUpperCase().replace(/\s+/g, " ");
 
-  // Only the plain tank top category should use the TANK TOPS wholesale pricing.
-  // Do NOT collapse categories like "NIKE TANK TOPS" or "PRO CLUB TANK TOPS" into "TANK TOPS".
-  // Give those products their own category so they use their own normal product price.
-  if (["TANK", "TANK TOP", "TANK TOPS", "PLAIN TANK", "PLAIN TANK TOP", "PLAIN TANK TOPS", "OG TANK", "OG TANK TOP", "OG TANK TOPS"].includes(c)) return "TANK TOPS";
-  if (c.includes("JORDAN") && c.includes("BOXER")) return "JORDAN BOXERS";
+  if (c.includes("TANK")) return "TANK TOPS";
   if (c.includes("BOXER")) return "BOXERS";
   if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
   if (c.includes("CRYSTAL") && c.includes("CASE")) return "CRYSTAL CASE";
@@ -103,160 +179,120 @@ function normalizeCategoryName(category = "") {
   if (c.includes("POD")) return "PODS";
   if (c.includes("PRO CLUB")) return "PRO CLUB";
   if (c.includes("RING")) return "RINGS";
-
   return c;
 }
 
-function isTankTopCategory(category = "") {
-  return normalizeCategoryName(category) === "TANK TOPS";
+function normalizePricingGroup(value = "") {
+  const group = String(value || "").trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(PRICING_GROUPS, group) ? group : PRICING_GROUPS.NONE;
 }
 
-function isBoxerCategory(category = "") {
-  return normalizeCategoryName(category) === "BOXERS";
-}
-
-function isJordanBoxerProduct(prod = {}) {
-  const normalizedCategory = normalizeCategoryName(prod?.category);
-  if (normalizedCategory === "JORDAN BOXERS") return true;
-  if (normalizedCategory !== "BOXERS") return false;
-
-  const signature = [prod?.name, prod?.code, prod?.sku]
+function productSignature(prod = {}) {
+  return [prod?.name, prod?.code, prod?.sku, prod?.category]
     .map((value) => String(value || "").trim().toUpperCase())
     .join(" ");
-
-  return /\bJORDAN\b/.test(signature);
 }
 
-function isStandardBoxerProduct(prod = {}) {
-  return isBoxerCategory(prod?.category) && !isJordanBoxerProduct(prod);
+function inferPricingGroup(prod = {}) {
+  const explicit = normalizePricingGroup(prod?.pricing_group);
+  if (explicit !== PRICING_GROUPS.NONE) return explicit;
+
+  const category = normalizeCategoryName(prod?.category);
+  const signature = productSignature(prod);
+
+  if (category === "EARRINGS") return PRICING_GROUPS.EARRINGS;
+
+  if (category === "BOXERS") {
+    if (/\b(JORDAN|TRAPSTAR|CORTEIZ|HELLSTAR|STUNNA|SUCK)\b/.test(signature)) {
+      return PRICING_GROUPS.BOXERS_PREMIUM;
+    }
+    return PRICING_GROUPS.BOXERS_STANDARD;
+  }
+
+  if (category === "TANK TOPS") {
+    if (/\bNIKE\b/.test(signature)) return PRICING_GROUPS.NIKE_TANK;
+    if (/\bJORDAN\b/.test(signature)) return PRICING_GROUPS.JORDAN_TANK;
+    if (/PATCH|W\/\s*PATCH|WITH PATCH/.test(signature)) return PRICING_GROUPS.PATCH_TANK;
+    return PRICING_GROUPS.TANK_STANDARD;
+  }
+
+  return PRICING_GROUPS.NONE;
 }
 
-function isEarringCategory(category = "") {
-  return normalizeCategoryName(category) === "EARRINGS";
+function getPricingRule(prodOrGroup = {}) {
+  const group = typeof prodOrGroup === "string"
+    ? normalizePricingGroup(prodOrGroup)
+    : inferPricingGroup(prodOrGroup);
+  return PRICING_RULES[group] || null;
 }
 
-function getTankTopPrice(qty) {
-  const q = clampInt(qty, 1);
-  if (q >= 100) return 40;
-  return 45;
-}
-
-function getBoxerPrice(qty) {
-  const q = clampInt(qty, 1);
-  if (q >= 1000) return 30;
-  if (q >= 500) return 31;
-  if (q >= 100) return 33;
-  return 35;
-}
-
-function getEarringPrice(qty) {
-  const q = clampInt(qty, 1);
-  if (q >= 500) return 15;
-  if (q >= 100) return 16;
-  return 18;
-}
-
-function getTotalTankTopQty(extraQty = 0) {
+function getTotalPricingGroupQty(group, extraQty = 0, excludeCartKey = "") {
+  const normalizedGroup = normalizePricingGroup(group);
   const current = cart.items
-    .filter((item) => isTankTopCategory(item?.category))
+    .filter((item) => {
+      const itemGroup = inferPricingGroup(item);
+      const itemKey = String(item?.cart_key || getCartItemKey(item?.id, item?.selected_size || ""));
+      return itemGroup === normalizedGroup && (!excludeCartKey || itemKey !== excludeCartKey);
+    })
     .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
   return current + (Number(extraQty) || 0);
 }
 
-function getTotalBoxerQty(extraQty = 0) {
-  const current = cart.items
-    .filter((item) => isStandardBoxerProduct(item))
-    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  return current + (Number(extraQty) || 0);
+function getTierForQty(rule, qty) {
+  if (!rule?.tiers?.length) return null;
+  const q = clampInt(qty, rule.minimum || 1);
+  return rule.tiers.find((tier) => q >= tier.min && q <= tier.max) || rule.tiers[rule.tiers.length - 1];
 }
 
-function getTotalEarringQty(extraQty = 0) {
-  const current = cart.items
-    .filter((item) => isEarringCategory(item?.category))
-    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  return current + (Number(extraQty) || 0);
-}
-
-function getProjectedTankTopPrice(prod, qty) {
-  if (!isTankTopCategory(prod?.category)) return Number(prod?.price) || 0;
-  return getTankTopPrice(getTotalTankTopQty(qty));
-}
-
-function getProjectedBoxerPrice(prod, qty) {
-  if (!isStandardBoxerProduct(prod)) return Number(prod?.price) || 0;
-  return getBoxerPrice(getTotalBoxerQty(qty));
-}
-
-function getProjectedEarringPrice(prod, qty) {
-  if (!isEarringCategory(prod?.category)) return Number(prod?.price) || 0;
-  return getEarringPrice(getTotalEarringQty(qty));
-}
-
-function syncTankTopCartPricing() {
-  const tankItems = cart.items.filter((item) => isTankTopCategory(item?.category));
-  if (!tankItems.length) return;
-
-  const totalQty = tankItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const price = getTankTopPrice(totalQty);
-
-  tankItems.forEach((item) => {
-    item.category = normalizeCategoryName(item.category);
-    item.price = price;
-  });
-}
-
-function syncBoxerCartPricing() {
-  const boxerItems = cart.items.filter((item) => isStandardBoxerProduct(item));
-  if (!boxerItems.length) return;
-
-  const totalQty = boxerItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const price = getBoxerPrice(totalQty);
-
-  boxerItems.forEach((item) => {
-    item.category = normalizeCategoryName(item.category);
-    item.price = price;
-  });
-}
-
-function syncEarringCartPricing() {
-  const earringItems = cart.items.filter((item) => isEarringCategory(item?.category));
-  if (!earringItems.length) return;
-
-  const totalQty = earringItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const price = getEarringPrice(totalQty);
-
-  earringItems.forEach((item) => {
-    item.category = normalizeCategoryName(item.category);
-    item.price = price;
-  });
+function getPricingGroupUnitPrice(group, qty) {
+  const rule = getPricingRule(group);
+  const tier = getTierForQty(rule, qty);
+  return tier ? Number(tier.price) || 0 : 0;
 }
 
 function syncCartWholesalePricing() {
   if (!cart || !Array.isArray(cart.items)) return;
-  syncTankTopCartPricing();
-  syncBoxerCartPricing();
-  syncEarringCartPricing();
+
+  const totals = new Map();
+  cart.items.forEach((item) => {
+    item.category = normalizeCategoryName(item.category);
+    item.pricing_group = inferPricingGroup(item);
+    if (item.pricing_group === PRICING_GROUPS.NONE) return;
+    totals.set(item.pricing_group, (totals.get(item.pricing_group) || 0) + (Number(item.qty) || 0));
+  });
+
+  cart.items.forEach((item) => {
+    const group = inferPricingGroup(item);
+    const rule = getPricingRule(group);
+    if (!rule) return;
+    item.pricing_group = group;
+    item.price = getPricingGroupUnitPrice(group, totals.get(group) || rule.minimum || 1);
+  });
 }
 
 function getMinQtyForProduct(prod) {
-  // All products can start at 1 pc. Wholesale discounts still apply by total cart quantity.
-  return 1;
+  const rule = getPricingRule(prod);
+  return rule?.minimum || 1;
 }
 
 function getUnitPriceForProduct(prod, qty) {
-  if (isTankTopCategory(prod?.category)) return getProjectedTankTopPrice(prod, qty);
-  if (isStandardBoxerProduct(prod)) return getProjectedBoxerPrice(prod, qty);
-  if (isEarringCategory(prod?.category)) return getProjectedEarringPrice(prod, qty);
-  return Number(prod?.price) || 0;
+  const group = inferPricingGroup(prod);
+  const rule = getPricingRule(group);
+  if (!rule) return Number(prod?.price) || 0;
+
+  const cleanSize = String(prod?.selected_size || "").trim();
+  const key = String(prod?.cart_key || getCartItemKey(prod?.id, cleanSize));
+  const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || "")) === key);
+  const projectedQty = getTotalPricingGroupQty(group, Number(qty) || 0, existing ? key : "");
+  return getPricingGroupUnitPrice(group, projectedQty);
 }
 
 function getCartUnitPrice(item) {
-  if (isTankTopCategory(item?.category)) return getTankTopPrice(getTotalTankTopQty());
-  if (isStandardBoxerProduct(item)) return getBoxerPrice(getTotalBoxerQty());
-  if (isEarringCategory(item?.category)) return getEarringPrice(getTotalEarringQty());
-  return Number(item?.price) || 0;
+  const group = inferPricingGroup(item);
+  const rule = getPricingRule(group);
+  if (!rule) return Number(item?.price) || 0;
+  return getPricingGroupUnitPrice(group, getTotalPricingGroupQty(group));
 }
-
 
 // ---------------- SHOP (shop.html) ----------------
 const cart = {
@@ -271,6 +307,7 @@ function loadCart() {
       return {
         ...it,
         category: normalizeCategoryName(it?.category || ""),
+        pricing_group: inferPricingGroup(it),
         selected_size: selectedSize,
         cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
       };
@@ -317,9 +354,11 @@ function addToCart(prod, qty, selectedSize = "") {
   const cleanSize = String(selectedSize || "").trim();
   const existing = findCartItem(prod.id, cleanSize);
   const normalizedCategory = normalizeCategoryName(prod.category || "");
+  const pricingGroup = inferPricingGroup(prod);
 
   if (existing) {
     existing.category = normalizedCategory;
+    existing.pricing_group = pricingGroup;
     existing.qty = clampInt((existing.qty || 0) + q, minQty);
   } else {
     cart.items.push({
@@ -330,6 +369,7 @@ function addToCart(prod, qty, selectedSize = "") {
       code: prod.code || "",
       sku: prod.sku || "",
       category: normalizedCategory,
+      pricing_group: pricingGroup,
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q,
       selected_size: cleanSize,
@@ -472,7 +512,7 @@ function initShop() {
   function renderProducts(list, filter) {
     const filtered = (filter === "ALL")
       ? list
-      : list.filter(p => String(p.category || "Earrings").toLowerCase() === String(filter).toLowerCase());
+      : list.filter(p => normalizeCategoryName(p.category || "Earrings") === normalizeCategoryName(filter));
 
     grid.innerHTML = "";
     empty.hidden = filtered.length !== 0;
@@ -539,60 +579,35 @@ function initShop() {
     const box = ensureWholesaleBox();
     if (!box || !currentProd) return;
 
-    const minQty = getMinQtyForProduct(currentProd);
-    const q = clampInt(pQty?.value || minQty, minQty);
-    const isTank = isTankTopCategory(currentProd.category);
-    const isBoxer = isStandardBoxerProduct(currentProd);
-    const isEarring = isEarringCategory(currentProd.category);
-
-    if (!isTank && !isBoxer && !isEarring) {
+    const group = inferPricingGroup(currentProd);
+    const rule = getPricingRule(group);
+    if (!rule) {
       box.hidden = true;
       box.innerHTML = '';
+      if (pPrice) pPrice.textContent = money(currentProd.base_price ?? currentProd.price);
       return;
     }
 
-    let price = 0;
-    let projectedTotal = q;
-    let rows = '';
-
-    if (isTank) {
-      projectedTotal = getTotalTankTopQty(q);
-      price = getTankTopPrice(projectedTotal);
-      rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱45 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 ? 'is-active' : ''}"><span>100+ total pcs</span><strong>₱40 each</strong></div>
-      `;
-    }
-
-    if (isBoxer) {
-      projectedTotal = getTotalBoxerQty(q);
-      price = getBoxerPrice(projectedTotal);
-      rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱35 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱33 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 500 && projectedTotal <= 999 ? 'is-active' : ''}"><span>500–999 total pcs</span><strong>₱31 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 1000 ? 'is-active' : ''}"><span>1000+ total pcs</span><strong>₱30 each</strong></div>
-      `;
-    }
-
-    if (isEarring) {
-      projectedTotal = getTotalEarringQty(q);
-      price = getEarringPrice(projectedTotal);
-      rows = `
-        <div class="wholesalePricing__row ${projectedTotal <= 99 ? 'is-active' : ''}"><span>1–99 total pcs</span><strong>₱18 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 100 && projectedTotal <= 499 ? 'is-active' : ''}"><span>100–499 total pcs</span><strong>₱16 each</strong></div>
-        <div class="wholesalePricing__row ${projectedTotal >= 500 ? 'is-active' : ''}"><span>500+ total pcs</span><strong>₱15 each</strong></div>
-      `;
-    }
-
+    const minQty = rule.minimum || 1;
+    const q = clampInt(pQty?.value || minQty, minQty);
+    const cleanSize = String(selectedSize || '').trim();
+    const key = getCartItemKey(currentProd.id, cleanSize);
+    const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '')) === key);
+    const projectedTotal = getTotalPricingGroupQty(group, q, existing ? key : '');
+    const price = getPricingGroupUnitPrice(group, projectedTotal);
     currentProd.price = price;
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
+
+    const rows = rule.tiers.map((tier) => {
+      const active = projectedTotal >= tier.min && projectedTotal <= tier.max;
+      return `<div class="wholesalePricing__row ${active ? 'is-active' : ''}"><span>${escapeHtml(tier.label)}</span><strong>${money(tier.price)} each</strong></div>`;
+    }).join('');
 
     box.hidden = false;
     box.innerHTML = `
       <div class="wholesalePricing__title">Wholesale Pricing</div>
       ${rows}
-      <div class="wholesalePricing__note">Tier is based on all ${normalizeCategoryName(currentProd.category).toLowerCase()} in cart. Current total after adding: ${projectedTotal} pcs</div>
+      <div class="wholesalePricing__note">Tier is based on all ${escapeHtml(rule.label.toLowerCase())} in cart. Current total after adding: ${projectedTotal} pcs</div>
     `;
   }
 
@@ -659,9 +674,11 @@ function initShop() {
       isTankTopCategory(currentProd.category) ||
       isStandardBoxerProduct(currentProd) ||
       isEarringCategory(currentProd.category);
-    pPrice.textContent = isWholesaleProduct
-      ? `${money(getUnitPriceForProduct(currentProd, getMinQtyForProduct(currentProd)))} / pc`
-      : money(currentProd.price);
+    const openingRule = getPricingRule(currentProd);
+    const openingPrice = openingRule
+      ? getPricingGroupUnitPrice(inferPricingGroup(currentProd), getTotalPricingGroupQty(inferPricingGroup(currentProd), getMinQtyForProduct(currentProd)))
+      : Number(currentProd.base_price ?? currentProd.price) || 0;
+    pPrice.textContent = openingRule ? `${money(openingPrice)} / pc` : money(openingPrice);
     pCategory.textContent = currentProd.category || "";
     pSku.textContent = currentProd.sku || "";
     pCode.textContent = currentProd.code || "";
@@ -776,6 +793,8 @@ function normalizeProduct(p) {
     id: p.id,
     name: p.name || "",
     price: Number(p.price) || 0,
+    base_price: Number(p.price) || 0,
+    pricing_group: inferPricingGroup(p),
     code: p.code || "",
     sku: p.sku || "",
     category: normalizeCategoryName(p.category || "Earrings"),
@@ -1092,6 +1111,7 @@ function initAdmin() {
   const aCode = $('#aCode');
   const aSku = $('#aSku');
   const aCategory = $('#aCategory');
+  const aPricingGroup = $('#aPricingGroup');
   const aSizes = $('#aSizes');
   const aStatus = $('#aStatus');
   const aSoldOut = $('#aSoldOut');
@@ -1296,6 +1316,7 @@ function initAdmin() {
       const sizeSummary = Array.isArray(p.sizes) && p.sizes.length ? `Sizes: ${p.sizes.join(', ')}` : null;
       const meta = [
         p.category ? `Category: ${p.category}` : null,
+        `Pricing: ${inferPricingGroup(p)}`,
         p.code ? `Code: ${p.code}` : null,
         `₱${Number(p.price || 0)}`,
         sizeSummary,
@@ -1363,6 +1384,7 @@ function initAdmin() {
     const code = (aCode?.value || '').trim();
     const sku = (aSku?.value || '').trim();
     const category = (aCategory?.value || 'Earrings');
+    const pricing_group = normalizePricingGroup(aPricingGroup?.value || 'NONE');
     const sizes = String(aSizes?.value || '')
       .split(',')
       .map(v => v.trim())
@@ -1379,6 +1401,7 @@ function initAdmin() {
       code,
       sku,
       category,
+      pricing_group,
       sizes,
       status,
       sold_out,
@@ -1401,6 +1424,7 @@ function initAdmin() {
       if (aCode) aCode.value = '';
       if (aSku) aSku.value = '';
       if (aSizes) aSizes.value = '';
+      if (aPricingGroup) aPricingGroup.value = 'NONE';
       if (aSoldOut) aSoldOut.checked = false;
       stagedImages = [];
       renderStaged();
