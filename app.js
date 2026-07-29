@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: 1PC_MIN_WHOLESALE_V4 - Tank Tops ₱45 1–99, ₱40 100+; Pro Club sizes supported; earrings 100+=₱16, 500+=₱15
+   PATCH: PRICING_GROUPS_V2_PROPER_FIX - preserves product categories, separates tank lines, keeps 1-pc minimum, click/cart stable
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -126,28 +126,28 @@ const PRICING_RULES = Object.freeze({
   },
   NIKE_TANK: {
     label: "Nike Tank Tops",
-    minimum: 10,
+    minimum: 1,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 60, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
     ]
   },
   JORDAN_TANK: {
     label: "Jordan Tank Tops",
-    minimum: 10,
+    minimum: 1,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 60, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
     ]
   },
   PATCH_TANK: {
     label: "OG Tank Top w/ Patch",
-    minimum: 10,
+    minimum: 1,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 60, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 60, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
     ]
   },
@@ -168,7 +168,30 @@ function normalizeCategoryName(category = "") {
   if (!raw) return "UNCATEGORIZED";
   const c = raw.toUpperCase().replace(/\s+/g, " ");
 
-  if (c.includes("TANK")) return "TANK TOPS";
+  // IMPORTANT: Do not collapse every tank product into one category.
+  // The shop category and the pricing group are separate concerns.
+  const plainTankAliases = new Set([
+    "TANK", "TANK TOP", "TANK TOPS",
+    "PLAIN TANK", "PLAIN TANK TOP", "PLAIN TANK TOPS",
+    "OG TANK", "OG TANK TOP", "OG TANK TOPS"
+  ]);
+  const nikeTankAliases = new Set([
+    "NIKE TANK", "NIKE TANK TOP", "NIKE TANK TOPS"
+  ]);
+  const jordanTankAliases = new Set([
+    "JORDAN TANK", "JORDAN TANK TOP", "JORDAN TANK TOPS"
+  ]);
+  const patchTankAliases = new Set([
+    "PATCH TANK", "PATCH TANK TOP", "PATCH TANK TOPS",
+    "OG TANK W/ PATCH", "OG TANK TOP W/ PATCH", "OG TANK TOPS W/ PATCH",
+    "OG TANK WITH PATCH", "OG TANK TOP WITH PATCH", "OG TANK TOPS WITH PATCH"
+  ]);
+
+  if (nikeTankAliases.has(c)) return "NIKE TANK TOPS";
+  if (jordanTankAliases.has(c)) return "JORDAN TANK TOPS";
+  if (patchTankAliases.has(c)) return "OG TANK TOP W/ PATCH";
+  if (plainTankAliases.has(c)) return "TANK TOPS";
+
   if (c.includes("BOXER")) return "BOXERS";
   if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
   if (c.includes("CRYSTAL") && c.includes("CASE")) return "CRYSTAL CASE";
@@ -194,11 +217,16 @@ function productSignature(prod = {}) {
 }
 
 function inferPricingGroup(prod = {}) {
-  const explicit = normalizePricingGroup(prod?.pricing_group);
-  if (explicit !== PRICING_GROUPS.NONE) return explicit;
+  // When pricing_group exists in Supabase, respect it exactly — including NONE.
+  // Fallback inference is only for older rows/files where the field is absent.
+  if (Object.prototype.hasOwnProperty.call(prod || {}, "pricing_group")) {
+    return normalizePricingGroup(prod?.pricing_group);
+  }
 
   const category = normalizeCategoryName(prod?.category);
   const signature = productSignature(prod);
+  const rawCategory = String(prod?.category || "").trim().toUpperCase();
+  const isTankProduct = rawCategory.includes("TANK") || /\bTANK\b/.test(signature);
 
   if (category === "EARRINGS") return PRICING_GROUPS.EARRINGS;
 
@@ -209,7 +237,7 @@ function inferPricingGroup(prod = {}) {
     return PRICING_GROUPS.BOXERS_STANDARD;
   }
 
-  if (category === "TANK TOPS") {
+  if (isTankProduct) {
     if (/\bNIKE\b/.test(signature)) return PRICING_GROUPS.NIKE_TANK;
     if (/\bJORDAN\b/.test(signature)) return PRICING_GROUPS.JORDAN_TANK;
     if (/PATCH|W\/\s*PATCH|WITH PATCH/.test(signature)) return PRICING_GROUPS.PATCH_TANK;
@@ -217,6 +245,17 @@ function inferPricingGroup(prod = {}) {
   }
 
   return PRICING_GROUPS.NONE;
+}
+
+function getProductCategory(prod = {}) {
+  const group = inferPricingGroup(prod);
+
+  if (group === PRICING_GROUPS.NIKE_TANK) return "NIKE TANK TOPS";
+  if (group === PRICING_GROUPS.JORDAN_TANK) return "JORDAN TANK TOPS";
+  if (group === PRICING_GROUPS.PATCH_TANK) return "OG TANK TOP W/ PATCH";
+  if (group === PRICING_GROUPS.TANK_STANDARD) return "TANK TOPS";
+
+  return normalizeCategoryName(prod?.category);
 }
 
 function getPricingRule(prodOrGroup = {}) {
@@ -255,7 +294,7 @@ function syncCartWholesalePricing() {
 
   const totals = new Map();
   cart.items.forEach((item) => {
-    item.category = normalizeCategoryName(item.category);
+    item.category = getProductCategory(item);
     item.pricing_group = inferPricingGroup(item);
     if (item.pricing_group === PRICING_GROUPS.NONE) return;
     totals.set(item.pricing_group, (totals.get(item.pricing_group) || 0) + (Number(item.qty) || 0));
@@ -306,7 +345,7 @@ function loadCart() {
       const selectedSize = String(it?.selected_size || "").trim();
       return {
         ...it,
-        category: normalizeCategoryName(it?.category || ""),
+        category: getProductCategory(it),
         pricing_group: inferPricingGroup(it),
         selected_size: selectedSize,
         cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
@@ -353,7 +392,7 @@ function addToCart(prod, qty, selectedSize = "") {
   const q = clampInt(qty, minQty);
   const cleanSize = String(selectedSize || "").trim();
   const existing = findCartItem(prod.id, cleanSize);
-  const normalizedCategory = normalizeCategoryName(prod.category || "");
+  const normalizedCategory = getProductCategory(prod);
   const pricingGroup = inferPricingGroup(prod);
 
   if (existing) {
@@ -418,7 +457,7 @@ function initShop() {
   });
 
 
-  const pills = $$(".pill");
+  let pills = Array.from($$(".pill"));
   let activeFilter = "Earrings"; // Default category
 
   // --- PRODUCTS DROPDOWN (supports your shop.html dropdown) ---
@@ -463,23 +502,57 @@ function initShop() {
   }
 
 
-  // Filter Logic
-  pills.forEach(p => {
-    p.addEventListener("click", () => {
-      pills.forEach(x => x.classList.remove("is-active"));
-      p.classList.add("is-active");
-      activeFilter = p.dataset.filter;
-      renderProducts(currentProducts, activeFilter);
+  // Filter Logic — event delegation also supports dynamically-added tank categories.
+  function selectProductFilter(p) {
+    if (!p) return;
+    pills = Array.from($$(".pill"));
+    pills.forEach(x => x.classList.remove("is-active"));
+    p.classList.add("is-active");
+    activeFilter = p.dataset.filter || "ALL";
+    renderProducts(currentProducts, activeFilter);
 
-      // Dropdown UX: close after selecting + reflect current label
-      closeProductsDropdown();
-      if (productsToggle) {
-        const label = (p.textContent || "").trim() || "PRODUCTS";
-        productsToggle.innerHTML = `${escapeHtml(label)} <span class="chev">▾</span>`;
-        productsToggle.setAttribute("aria-expanded", "false");
-      }
-    });
+    closeProductsDropdown();
+    if (productsToggle) {
+      const label = (p.textContent || "").trim() || "PRODUCTS";
+      productsToggle.innerHTML = `${escapeHtml(label)} <span class="chev">▾</span>`;
+      productsToggle.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  productsDropdown?.addEventListener("click", (event) => {
+    const p = event.target.closest(".pill");
+    if (!p || !productsDropdown.contains(p)) return;
+    selectProductFilter(p);
   });
+
+  function ensureTankCategoryFilters(products = []) {
+    if (!productsDropdown) return;
+
+    const tankCategories = [
+      [PRICING_GROUPS.TANK_STANDARD, "TANK TOPS"],
+      [PRICING_GROUPS.NIKE_TANK, "NIKE TANK TOPS"],
+      [PRICING_GROUPS.JORDAN_TANK, "JORDAN TANK TOPS"],
+      [PRICING_GROUPS.PATCH_TANK, "OG TANK TOP W/ PATCH"]
+    ];
+
+    tankCategories.forEach(([group, label]) => {
+      const hasProducts = products.some((prod) => inferPricingGroup(prod) === group);
+      const alreadyExists = Array.from(productsDropdown.querySelectorAll(".pill"))
+        .some((pill) => normalizeCategoryName(pill.dataset.filter || "") === normalizeCategoryName(label));
+
+      if (!hasProducts || alreadyExists) return;
+
+      const button = document.createElement("button");
+      button.className = "pill";
+      button.type = "button";
+      button.setAttribute("role", "menuitem");
+      button.dataset.filter = label;
+      button.textContent = label;
+      productsDropdown.appendChild(button);
+    });
+
+    pills = Array.from($$(".pill"));
+  }
 
   let currentProducts = [];
 
@@ -506,13 +579,43 @@ function initShop() {
     currentProducts = (data || [])
       .filter(p => (p.status || "active") === "active");
 
+    ensureTankCategoryFilters(currentProducts);
+
+    // Repair category/pricing metadata saved by older broken versions without
+    // deleting the customer's cart or changing quantities.
+    const productsById = new Map(currentProducts.map((prod) => [String(prod.id), prod]));
+    let cartWasRepaired = false;
+    cart.items.forEach((item) => {
+      const source = productsById.get(String(item.id));
+      if (!source) return;
+
+      const repairedGroup = inferPricingGroup(source);
+      const repairedCategory = getProductCategory(source);
+      if (item.pricing_group !== repairedGroup || item.category !== repairedCategory) {
+        item.pricing_group = repairedGroup;
+        item.category = repairedCategory;
+        cartWasRepaired = true;
+      }
+      if (source.name && item.name !== source.name) {
+        item.name = source.name;
+        cartWasRepaired = true;
+      }
+      const sourceImage = toCDN((source.images && source.images[0]) || source.image_url || "");
+      if (sourceImage && item.image !== sourceImage) {
+        item.image = sourceImage;
+        cartWasRepaired = true;
+      }
+    });
+    if (cartWasRepaired) saveCart();
+
     renderProducts(currentProducts, activeFilter);
   }
 
   function renderProducts(list, filter) {
-    const filtered = (filter === "ALL")
+    const normalizedFilter = normalizeCategoryName(filter || "ALL");
+    const filtered = (normalizedFilter === "ALL")
       ? list
-      : list.filter(p => normalizeCategoryName(p.category || "Earrings") === normalizeCategoryName(filter));
+      : list.filter((p) => getProductCategory(p) === normalizedFilter);
 
     grid.innerHTML = "";
     empty.hidden = filtered.length !== 0;
@@ -791,7 +894,7 @@ function normalizeProduct(p) {
     pricing_group: inferPricingGroup(p),
     code: p.code || "",
     sku: p.sku || "",
-    category: normalizeCategoryName(p.category || "Earrings"),
+    category: getProductCategory(p),
     image_url: p.image_url || "",
     images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
     sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : [],
@@ -933,7 +1036,7 @@ function wireCartUI() {
     // Group items by normalized category to prevent duplicate sections.
     const groups = new Map();
     cart.items.forEach(it => {
-      const cat = normalizeCategoryName(it.category);
+      const cat = getProductCategory(it);
       if (!groups.has(cat)) groups.set(cat, []);
       groups.get(cat).push(it);
     });
