@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: PRICING_GROUPS_V2_PROPER_FIX - preserves product categories, separates tank lines, keeps 1-pc minimum, click/cart stable
+   PATCH: BOXERS_STANDARD_35_33_30 - preserves proper tank separation and click/cart stability; standard boxer minimum is enforced across the whole pricing group
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -96,13 +96,15 @@ const PRICING_GROUPS = Object.freeze({
 const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
     label: "Standard Boxers",
+    // Customers may mix standard-boxer designs/colors in the cart.
+    // The group itself must reach 10 pcs before checkout.
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 35, label: "1–99 total pcs" },
-      { min: 100, max: 499, price: 33, label: "100–499 total pcs" },
-      { min: 500, max: 999, price: 31, label: "500–999 total pcs" },
-      { min: 1000, max: Infinity, price: 30, label: "1000+ total pcs" }
+      { min: 10, max: 99, price: 35, label: "₱35 each — Min. 10 pcs" },
+      { min: 100, max: 199, price: 33, label: "₱33 each — Min. 100 pcs" },
+      { min: 200, max: Infinity, price: 30, label: "₱30 each — Min. 200 pcs" }
     ]
   },
   BOXERS_PREMIUM: {
@@ -280,13 +282,47 @@ function getTotalPricingGroupQty(group, extraQty = 0, excludeCartKey = "") {
 function getTierForQty(rule, qty) {
   if (!rule?.tiers?.length) return null;
   const q = clampInt(qty, rule.minimum || 1);
-  return rule.tiers.find((tier) => q >= tier.min && q <= tier.max) || rule.tiers[rule.tiers.length - 1];
+
+  // If the cart is still below a wholesale order minimum, preview the
+  // first/starting tier price instead of incorrectly falling through to
+  // the highest-volume tier. Checkout validation separately enforces the
+  // required group minimum (e.g. 10 total standard boxers).
+  const firstTier = rule.tiers[0];
+  if (q < firstTier.min) return firstTier;
+
+  return rule.tiers.find((tier) => q >= tier.min && q <= tier.max)
+    || rule.tiers[rule.tiers.length - 1];
 }
 
 function getPricingGroupUnitPrice(group, qty) {
   const rule = getPricingRule(group);
   const tier = getTierForQty(rule, qty);
   return tier ? Number(tier.price) || 0 : 0;
+}
+
+function getPricingGroupOrderMinimum(prodOrGroup = {}) {
+  const rule = getPricingRule(prodOrGroup);
+  return Math.max(0, Number(rule?.orderMinimum) || 0);
+}
+
+function getCartPricingGroupQty(group) {
+  const normalizedGroup = normalizePricingGroup(group);
+  return cart.items
+    .filter((item) => inferPricingGroup(item) === normalizedGroup)
+    .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+}
+
+function getWholesaleMinimumError() {
+  for (const [group, rule] of Object.entries(PRICING_RULES)) {
+    const required = Math.max(0, Number(rule?.orderMinimum) || 0);
+    if (!required) continue;
+
+    const current = getCartPricingGroupQty(group);
+    if (current > 0 && current < required) {
+      return `${rule.label} requires at least ${required} total pcs. Your cart currently has ${current} pcs.`;
+    }
+  }
+  return "";
 }
 
 function syncCartWholesalePricing() {
@@ -710,7 +746,7 @@ function initShop() {
     box.innerHTML = `
       <div class="wholesalePricing__title">Wholesale Pricing</div>
       ${rows}
-      <div class="wholesalePricing__note">Tier is based on all ${escapeHtml(rule.label.toLowerCase())} in cart. Current total after adding: ${projectedTotal} pcs</div>
+      <div class="wholesalePricing__note">Tier is based on all ${escapeHtml(rule.label.toLowerCase())} in cart. Current total after adding: ${projectedTotal} pcs${rule.orderMinimum ? ` · Minimum order: ${rule.orderMinimum} total pcs` : ''}</div>
     `;
   }
 
@@ -951,6 +987,13 @@ function wireCartUI() {
 
   checkoutBtn?.addEventListener("click", async () => {
     if (!cart.items.length) return;
+
+    syncCartWholesalePricing();
+    const wholesaleMinimumError = getWholesaleMinimumError();
+    if (wholesaleMinimumError) {
+      alert(wholesaleMinimumError);
+      return;
+    }
 
     const sb = getSupabase();
     if (sb) {
