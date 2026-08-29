@@ -169,29 +169,11 @@ function normalizeCategoryName(category = "") {
   if (!raw) return "UNCATEGORIZED";
   const c = raw.toUpperCase().replace(/\s+/g, " ");
 
-  // IMPORTANT: Do not collapse every tank product into one category.
-  // The shop category and the pricing group are separate concerns.
-  const plainTankAliases = new Set([
-    "TANK", "TANK TOP", "TANK TOPS",
-    "PLAIN TANK", "PLAIN TANK TOP", "PLAIN TANK TOPS",
-    "OG TANK", "OG TANK TOP", "OG TANK TOPS"
-  ]);
-  const nikeTankAliases = new Set([
-    "NIKE TANK", "NIKE TANK TOP", "NIKE TANK TOPS"
-  ]);
-  const jordanTankAliases = new Set([
-    "JORDAN TANK", "JORDAN TANK TOP", "JORDAN TANK TOPS"
-  ]);
-  const patchTankAliases = new Set([
-    "PATCH TANK", "PATCH TANK TOP", "PATCH TANK TOPS",
-    "OG TANK W/ PATCH", "OG TANK TOP W/ PATCH", "OG TANK TOPS W/ PATCH",
-    "OG TANK WITH PATCH", "OG TANK TOP WITH PATCH", "OG TANK TOPS WITH PATCH"
-  ]);
-
-  if (nikeTankAliases.has(c)) return "NIKE TANK TOPS";
-  if (jordanTankAliases.has(c)) return "JORDAN TANK TOPS";
-  if (patchTankAliases.has(c)) return "OG TANK TOP W/ PATCH";
-  if (plainTankAliases.has(c)) return "TANK TOPS";
+  // SHOP CATEGORY RULE:
+  // All tank-top variants live under ONE customer-facing category: TANK TOPS.
+  // Pricing is still controlled independently by pricing_group, so Nike,
+  // Jordan, Patch, and Plain tank tops can keep different wholesale tiers.
+  if (c.includes("TANK")) return "TANK TOPS";
 
   if (c.includes("BOXER")) return "BOXERS";
   if (c.includes("EARRING") || c.includes("EAR RING") || c.includes("ICE OUT") || c.includes("ICED OUT")) return "EARRINGS";
@@ -251,10 +233,13 @@ function inferPricingGroup(prod = {}) {
 function getProductCategory(prod = {}) {
   const group = inferPricingGroup(prod);
 
-  if (group === PRICING_GROUPS.NIKE_TANK) return "NIKE TANK TOPS";
-  if (group === PRICING_GROUPS.JORDAN_TANK) return "JORDAN TANK TOPS";
-  if (group === PRICING_GROUPS.PATCH_TANK) return "OG TANK TOP W/ PATCH";
-  if (group === PRICING_GROUPS.TANK_STANDARD) return "TANK TOPS";
+  // Customer-facing category is unified, pricing groups remain separate.
+  if ([
+    PRICING_GROUPS.TANK_STANDARD,
+    PRICING_GROUPS.NIKE_TANK,
+    PRICING_GROUPS.JORDAN_TANK,
+    PRICING_GROUPS.PATCH_TANK
+  ].includes(group)) return "TANK TOPS";
 
   return normalizeCategoryName(prod?.category);
 }
@@ -560,34 +545,8 @@ function initShop() {
     selectProductFilter(p);
   });
 
-  function ensureTankCategoryFilters(products = []) {
-    if (!productsDropdown) return;
-
-    const tankCategories = [
-      [PRICING_GROUPS.TANK_STANDARD, "TANK TOPS"],
-      [PRICING_GROUPS.NIKE_TANK, "NIKE TANK TOPS"],
-      [PRICING_GROUPS.JORDAN_TANK, "JORDAN TANK TOPS"],
-      [PRICING_GROUPS.PATCH_TANK, "OG TANK TOP W/ PATCH"]
-    ];
-
-    tankCategories.forEach(([group, label]) => {
-      const hasProducts = products.some((prod) => inferPricingGroup(prod) === group);
-      const alreadyExists = Array.from(productsDropdown.querySelectorAll(".pill"))
-        .some((pill) => normalizeCategoryName(pill.dataset.filter || "") === normalizeCategoryName(label));
-
-      if (!hasProducts || alreadyExists) return;
-
-      const button = document.createElement("button");
-      button.className = "pill";
-      button.type = "button";
-      button.setAttribute("role", "menuitem");
-      button.dataset.filter = label;
-      button.textContent = label;
-      productsDropdown.appendChild(button);
-    });
-
-    pills = Array.from($$(".pill"));
-  }
+  // Tank-top category buttons are controlled by shop.html only.
+  // app.js no longer creates separate Nike/Jordan/Patch category buttons.
 
   let currentProducts = [];
 
@@ -614,7 +573,6 @@ function initShop() {
     currentProducts = (data || [])
       .filter(p => (p.status || "active") === "active");
 
-    ensureTankCategoryFilters(currentProducts);
 
     // Repair category/pricing metadata saved by older broken versions without
     // deleting the customer's cart or changing quantities.
