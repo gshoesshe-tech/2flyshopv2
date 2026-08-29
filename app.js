@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: BOXERS_STANDARD_35_33_30 - preserves proper tank separation and click/cart stability; standard boxer minimum is enforced across the whole pricing group
+   PATCH: BOXERS_STANDARD_35_33_30 - preserves proper tank separation and click/cart stability; 1pc purchase allowed, wholesale tier labels start at 10/100/200
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -97,12 +97,11 @@ const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
     label: "Standard Boxers",
     // Customers may mix standard-boxer designs/colors in the cart.
-    // The group itself must reach 10 pcs before checkout.
+    // 1-9 pcs are still allowed at ₱35 each; wholesale tier labels begin at 10 pcs.
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 35, label: "₱35 each — Min. 10 pcs" },
+      { min: 1, max: 99, price: 35, label: "₱35 each — Min. 10 pcs" },
       { min: 100, max: 199, price: 33, label: "₱33 each — Min. 100 pcs" },
       { min: 200, max: Infinity, price: 30, label: "₱30 each — Min. 200 pcs" }
     ]
@@ -989,12 +988,6 @@ function wireCartUI() {
     if (!cart.items.length) return;
 
     syncCartWholesalePricing();
-    const wholesaleMinimumError = getWholesaleMinimumError();
-    if (wholesaleMinimumError) {
-      alert(wholesaleMinimumError);
-      return;
-    }
-
     const sb = getSupabase();
     if (sb) {
       const ids = cart.items.map((it) => it.id).filter(Boolean);
