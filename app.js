@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: BOXERS_STANDARD_35_33_30 - preserves proper tank separation and click/cart stability; 1pc purchase allowed, wholesale tier labels start at 10/100/200
+   PATCH: BOXERS_STANDARD_1PC_START - preserves one Tank Tops category, click/cart stability, and allows standard boxers from 1 pc at ₱35
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -97,13 +97,13 @@ const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
     label: "Standard Boxers",
     // Customers may mix standard-boxer designs/colors in the cart.
-    // 1-9 pcs are still allowed at ₱35 each; wholesale tier labels begin at 10 pcs.
+    // Customers can buy from 1 pc. Standard-boxer pricing is ₱35 for 1–99, ₱33 for 100–199, ₱30 for 200+.
     minimum: 1,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 35, label: "₱35 each — Min. 10 pcs" },
-      { min: 100, max: 199, price: 33, label: "₱33 each — Min. 100 pcs" },
-      { min: 200, max: Infinity, price: 30, label: "₱30 each — Min. 200 pcs" }
+      { min: 1, max: 99, price: 35, label: "1–99 pcs" },
+      { min: 100, max: 199, price: 33, label: "100–199 pcs" },
+      { min: 200, max: Infinity, price: 30, label: "200+ pcs" }
     ]
   },
   BOXERS_PREMIUM: {
