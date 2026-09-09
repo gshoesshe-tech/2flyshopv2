@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: STANDARD_BOXER_SALE_SEP8_9 - ₱29 standard boxers from 1 pc on Sept 8-9, 2026 (Asia/Manila), then automatic normal-price restore
+   PATCH: DESIGNER_BOXER_SALE_SEP8_15 - ₱29 designer boxers from 1 pc on Sept 8-15, 2026 (Asia/Manila), with entry popup and automatic normal-price restore
    - Handles Landing, Shop, and Admin logic
    - Requires Supabase setup in config.js
 */
@@ -95,13 +95,13 @@ const PRICING_GROUPS = Object.freeze({
 
 // ---------------- TEMPORARY STANDARD BOXER SALE ----------------
 // Sale runs by Philippine calendar date, regardless of the customer's device timezone.
-// Sept 8-9, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
-// On Sept 10 (Philippine time), normal ₱35 / ₱33 / ₱30 tiers resume automatically.
+// Sept 8-15, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
+// On Sept 16 (Philippine time), normal ₱35 / ₱33 / ₱30 tiers resume automatically.
 const STANDARD_BOXER_SALE = Object.freeze({
   startDatePH: "2026-09-08",
-  endDatePH: "2026-09-09",
+  endDatePH: "2026-09-15",
   price: 29,
-  label: "9.9 SALE"
+  label: "9.9 SALE EXTENDED"
 });
 
 function getPhilippineDateKey(date = new Date()) {
@@ -124,6 +124,80 @@ function getPhilippineDateKey(date = new Date()) {
 function isStandardBoxerSaleActive(date = new Date()) {
   const dateKey = getPhilippineDateKey(date);
   return dateKey >= STANDARD_BOXER_SALE.startDatePH && dateKey <= STANDARD_BOXER_SALE.endDatePH;
+}
+
+function showDesignerBoxerSalePopup() {
+  // Show on every shop page load while the sale is active. No localStorage/sessionStorage on purpose.
+  if (!isStandardBoxerSaleActive() || document.getElementById("designerBoxerSalePopup")) return;
+
+  if (!document.getElementById("designerBoxerSalePopupStyles")) {
+    const style = document.createElement("style");
+    style.id = "designerBoxerSalePopupStyles";
+    style.textContent = `
+      .designerSalePopup{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      .designerSalePopup__card{position:relative;width:min(430px,100%);background:#0b0b0b;border:1px solid rgba(255,255,255,.22);box-shadow:0 24px 80px rgba(0,0,0,.55);padding:34px 28px 28px;text-align:center;color:#fff}
+      .designerSalePopup__closeX{position:absolute;top:13px;right:14px;width:34px;height:34px;border:0;background:transparent;color:rgba(255,255,255,.65);font-size:24px;line-height:1;cursor:pointer}
+      .designerSalePopup__eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:12px}
+      .designerSalePopup__title{font-size:clamp(22px,5vw,30px);font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin:0 0 24px}
+      .designerSalePopup__product{font-size:13px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.72);margin-bottom:8px}
+      .designerSalePopup__price{font-size:clamp(42px,11vw,64px);font-weight:950;letter-spacing:-.04em;line-height:.95;margin-bottom:18px}
+      .designerSalePopup__until{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.78);margin-bottom:7px}
+      .designerSalePopup__sub{font-size:13px;line-height:1.55;color:rgba(255,255,255,.58);margin:0 auto 24px;max-width:310px}
+      .designerSalePopup__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .designerSalePopup__btn{min-height:46px;border:1px solid rgba(255,255,255,.24);font:inherit;font-size:12px;font-weight:850;letter-spacing:.11em;text-transform:uppercase;cursor:pointer}
+      .designerSalePopup__btn--primary{background:#fff;color:#050505}
+      .designerSalePopup__btn--ghost{background:transparent;color:#fff}
+      @media (max-width:480px){.designerSalePopup{padding:16px}.designerSalePopup__card{padding:32px 20px 22px}.designerSalePopup__actions{grid-template-columns:1fr}.designerSalePopup__price{font-size:50px}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  const popup = document.createElement("div");
+  popup.id = "designerBoxerSalePopup";
+  popup.className = "designerSalePopup";
+  popup.setAttribute("role", "dialog");
+  popup.setAttribute("aria-modal", "true");
+  popup.setAttribute("aria-labelledby", "designerSaleTitle");
+  popup.innerHTML = `
+    <div class="designerSalePopup__card">
+      <button class="designerSalePopup__closeX" type="button" data-sale-close aria-label="Close sale notice">×</button>
+      <div class="designerSalePopup__eyebrow">Limited Time Offer</div>
+      <h2 class="designerSalePopup__title" id="designerSaleTitle">9.9 Sale Extended</h2>
+      <div class="designerSalePopup__product">Designer Boxers</div>
+      <div class="designerSalePopup__price">₱29 EACH</div>
+      <div class="designerSalePopup__until">Promo valid until September 15</div>
+      <p class="designerSalePopup__sub">Shop now before prices go back up.</p>
+      <div class="designerSalePopup__actions">
+        <button class="designerSalePopup__btn designerSalePopup__btn--primary" type="button" data-sale-shop>Shop Now</button>
+        <button class="designerSalePopup__btn designerSalePopup__btn--ghost" type="button" data-sale-close>Close</button>
+      </div>
+    </div>
+  `;
+
+  const previousOverflow = document.body.style.overflow;
+  document.body.appendChild(popup);
+  document.body.style.overflow = "hidden";
+
+  const closePopup = () => {
+    popup.remove();
+    document.body.style.overflow = previousOverflow;
+  };
+
+  popup.querySelectorAll("[data-sale-close]").forEach((btn) => btn.addEventListener("click", closePopup));
+  popup.addEventListener("click", (e) => {
+    if (e.target === popup) closePopup();
+  });
+
+  popup.querySelector("[data-sale-shop]")?.addEventListener("click", () => {
+    closePopup();
+    const boxerPill = Array.from(document.querySelectorAll(".pill")).find((pill) =>
+      String(pill.dataset.filter || pill.textContent || "").toUpperCase().includes("BOXER")
+    );
+    boxerPill?.click();
+    setTimeout(() => document.getElementById("productsGrid")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  });
+
+  popup.querySelector("[data-sale-shop]")?.focus();
 }
 
 const PRICING_RULES = Object.freeze({
@@ -315,7 +389,7 @@ function getPricingGroupUnitPrice(group, qty) {
   const normalizedGroup = normalizePricingGroup(group);
 
   // Temporary 9.9 sale override. This sits above the normal pricing rules so
-  // every standard boxer in the cart stays ₱29 during Sept 8-9, 2026.
+  // every standard boxer in the cart stays ₱29 during Sept 8-15, 2026.
   if (normalizedGroup === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) {
     return STANDARD_BOXER_SALE.price;
   }
@@ -484,6 +558,7 @@ function addToCart(prod, qty, selectedSize = "") {
 function initShop() {
   loadCart();
   wireCartUI();
+  showDesignerBoxerSalePopup();
 
   const sb = getSupabase(); // Use the safe getter
   const grid = $("#productsGrid");
@@ -737,7 +812,7 @@ function initShop() {
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     const rows = saleActive
-      ? `<div class="wholesalePricing__row is-active"><span>Sept 8–9 · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
+      ? `<div class="wholesalePricing__row is-active"><span>Sept 8–15 · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
       : rule.tiers.map((tier) => {
           const active = projectedTotal >= tier.min && projectedTotal <= tier.max;
           return `<div class="wholesalePricing__row ${active ? 'is-active' : ''}"><span>${escapeHtml(tier.label)}</span><strong>${money(tier.price)} each</strong></div>`;
@@ -748,7 +823,7 @@ function initShop() {
       ? `
         <div class="wholesalePricing__title">${escapeHtml(STANDARD_BOXER_SALE.label)}</div>
         ${rows}
-        <div class="wholesalePricing__note">Standard boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc through Sept 9 (Philippine time). Normal pricing returns automatically on Sept 10.</div>
+        <div class="wholesalePricing__note">Designer boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc through Sept 15 (Philippine time). Normal pricing returns automatically on Sept 16.</div>
       `
       : `
         <div class="wholesalePricing__title">Wholesale Pricing</div>
