@@ -96,7 +96,7 @@ const PRICING_GROUPS = Object.freeze({
 // ---------------- TEMPORARY STANDARD BOXER SALE ----------------
 // Sale runs by Philippine calendar date, regardless of the customer's device timezone.
 // Sept 8-15, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
-// On Sept 16 (Philippine time), normal ₱35 / ₱33 / ₱30 tiers resume automatically.
+// On Sept 16 (Philippine time), the new regular pricing takes over automatically.
 const STANDARD_BOXER_SALE = Object.freeze({
   startDatePH: "2026-09-08",
   endDatePH: "2026-09-15",
@@ -202,15 +202,15 @@ function showDesignerBoxerSalePopup() {
 
 const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
-    label: "Standard Boxers",
-    // Customers may mix standard-boxer designs/colors in the cart.
-    // Customers can buy from 1 pc. Standard-boxer pricing is ₱35 for 1–99, ₱33 for 100–199, ₱30 for 200+.
+    label: "Designer Boxers",
+    // New regular pricing after the Sept 8–15 sale.
+    // Customers may mix standard/designer boxer designs and colors toward the group minimum and tiers.
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 35, label: "1–99 pcs" },
-      { min: 100, max: 199, price: 33, label: "100–199 pcs" },
-      { min: 200, max: Infinity, price: 30, label: "200+ pcs" }
+      { min: 10, max: 99, price: 35, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 30, label: "100+ total pcs" }
     ]
   },
   BOXERS_PREMIUM: {
@@ -235,19 +235,21 @@ const PRICING_RULES = Object.freeze({
   NIKE_TANK: {
     label: "Nike Tank Tops",
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 60, label: "1–99 total pcs" },
-      { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
+      { min: 10, max: 99, price: 55, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 50, label: "100+ total pcs" }
     ]
   },
   JORDAN_TANK: {
     label: "Jordan Tank Tops",
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 60, label: "1–99 total pcs" },
-      { min: 100, max: Infinity, price: 52, label: "100+ total pcs" }
+      { min: 10, max: 99, price: 55, label: "10–99 total pcs" },
+      { min: 100, max: Infinity, price: 50, label: "100+ total pcs" }
     ]
   },
   PATCH_TANK: {
@@ -413,6 +415,10 @@ function getCartPricingGroupQty(group) {
 
 function getWholesaleMinimumError() {
   for (const [group, rule] of Object.entries(PRICING_RULES)) {
+    // The Sept 8–15 designer-boxer sale has no minimum. The 10-pc minimum
+    // automatically starts only after the sale ends.
+    if (group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) continue;
+
     const required = Math.max(0, Number(rule?.orderMinimum) || 0);
     if (!required) continue;
 
@@ -813,8 +819,9 @@ function initShop() {
 
     const rows = saleActive
       ? `<div class="wholesalePricing__row is-active"><span>Sept 8–15 · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
-      : rule.tiers.map((tier) => {
-          const active = projectedTotal >= tier.min && projectedTotal <= tier.max;
+      : rule.tiers.map((tier, index) => {
+          const belowFirstTier = index === 0 && projectedTotal < rule.tiers[0].min;
+          const active = belowFirstTier || (projectedTotal >= tier.min && projectedTotal <= tier.max);
           return `<div class="wholesalePricing__row ${active ? 'is-active' : ''}"><span>${escapeHtml(tier.label)}</span><strong>${money(tier.price)} each</strong></div>`;
         }).join('');
 
@@ -823,7 +830,7 @@ function initShop() {
       ? `
         <div class="wholesalePricing__title">${escapeHtml(STANDARD_BOXER_SALE.label)}</div>
         ${rows}
-        <div class="wholesalePricing__note">Designer boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc through Sept 15 (Philippine time). Normal pricing returns automatically on Sept 16.</div>
+        <div class="wholesalePricing__note">Designer boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc through Sept 15 (Philippine time). New regular pricing starts automatically on Sept 16.</div>
       `
       : `
         <div class="wholesalePricing__title">Wholesale Pricing</div>
@@ -1071,6 +1078,13 @@ function wireCartUI() {
     if (!cart.items.length) return;
 
     syncCartWholesalePricing();
+
+    const minimumError = getWholesaleMinimumError();
+    if (minimumError) {
+      alert(minimumError);
+      return;
+    }
+
     const sb = getSupabase();
     if (sb) {
       const ids = cart.items.map((it) => it.id).filter(Boolean);
