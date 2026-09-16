@@ -203,13 +203,12 @@ function showDesignerBoxerSalePopup() {
 const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
     label: "Designer Boxers",
-    // New regular pricing after the Sept 8–15 sale.
-    // Customers may mix standard/designer boxer designs and colors toward the group minimum and tiers.
+    // Regular pricing after the Sept 8–15 sale.
+    // Customers can buy from 1 pc. Mixed designer-boxer designs/colors combine toward the 100+ tier.
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 35, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 35, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 30, label: "100+ total pcs" }
     ]
   },
@@ -235,20 +234,18 @@ const PRICING_RULES = Object.freeze({
   NIKE_TANK: {
     label: "Nike Tank Tops",
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 55, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 55, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 50, label: "100+ total pcs" }
     ]
   },
   JORDAN_TANK: {
     label: "Jordan Tank Tops",
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 55, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 55, label: "1–99 total pcs" },
       { min: 100, max: Infinity, price: 50, label: "100+ total pcs" }
     ]
   },
@@ -415,8 +412,8 @@ function getCartPricingGroupQty(group) {
 
 function getWholesaleMinimumError() {
   for (const [group, rule] of Object.entries(PRICING_RULES)) {
-    // The Sept 8–15 designer-boxer sale has no minimum. The 10-pc minimum
-    // automatically starts only after the sale ends.
+    // Pricing tiers never block a customer from buying a smaller quantity.
+    // orderMinimum is reserved only for future products that truly require one.
     if (group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) continue;
 
     const required = Math.max(0, Number(rule?.orderMinimum) || 0);
