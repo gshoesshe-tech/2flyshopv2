@@ -2,30 +2,14 @@
 /* 2FLY Wholesale System (Fixed)
    PATCH: DESIGNER_BOXER_SALE_SEP8_15 - ₱29 designer boxers from 1 pc on Sept 8-15, 2026 (Asia/Manila), with entry popup and automatic normal-price restore
    - Handles Landing, Shop, and Admin logic
-   - Requires Supabase setup in config.js
+   - Uses the Cloudflare API client in config.js
 */
 
-const SUPABASE_URL = (window.__SUPABASE_URL__ || '').trim();
-const SUPABASE_ANON_KEY = (window.__SUPABASE_ANON_KEY__ || '').trim();
-
-let __sb = null;
-
-// --- Helper Functions ---
-
-// 1. FIX: Added the missing money formatting function
+// Same-origin Cloudflare API. No database credentials are shipped to browsers.
 function money(val) {
   return '₱' + (Number(val) || 0).toLocaleString('en-US');
 }
-
-function hasSupabase() {
-  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase && typeof window.supabase.createClient === 'function');
-}
-
-function getSupabase() {
-  if (!hasSupabase()) return null;
-  if (!__sb) __sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return __sb;
-}
+function getBackend() { return window.TwoFlyAPI; }
 
 function clampInt(v, min = 1) {
   const n = parseInt(v, 10);
@@ -38,19 +22,8 @@ const $ = (sel, p = document) => p.querySelector(sel);
 const $$ = (sel, p = document) => p.querySelectorAll(sel);
 
 
-// --- CDN helper (Supabase -> Cloudflare Worker) ---
-const SUPABASE_ORIGIN = "https://ngthitqzqtnvmsthwddl.supabase.co";
-const CDN_ORIGIN = "https://cdn.2flygalleria.com";
-
-function toCDN(url) {
-  const u = String(url || "").trim();
-  if (!u) return "";
-  if (u.startsWith(CDN_ORIGIN)) return u;
-  if (u.startsWith(SUPABASE_ORIGIN)) return u.replace(SUPABASE_ORIGIN, CDN_ORIGIN);
-  return u; // keep external URLs unchanged
-}
-
-
+// Preserve imported/local URLs without routing images back through Supabase.
+function toCDN(url) { return String(url || '').trim(); }
 
 // ---------------- LANDING (index.html) ----------------
 // 2. FIX: Added logic for the Landing page
@@ -306,7 +279,7 @@ function productSignature(prod = {}) {
 }
 
 function inferPricingGroup(prod = {}) {
-  // When pricing_group exists in Supabase, respect it exactly — including NONE.
+  // When pricing_group exists in the database, respect it exactly — including NONE.
   // Fallback inference is only for older rows/files where the field is absent.
   if (Object.prototype.hasOwnProperty.call(prod || {}, "pricing_group")) {
     return normalizePricingGroup(prod?.pricing_group);
@@ -563,7 +536,7 @@ function initShop() {
   wireCartUI();
   showDesignerBoxerSalePopup();
 
-  const sb = getSupabase(); // Use the safe getter
+  const sb = getBackend(); // Use the safe getter
   const grid = $("#productsGrid");
   const empty = $("#emptyState");
 
@@ -671,16 +644,13 @@ function initShop() {
 
   async function fetchProducts() {
     if (!sb) {
-      console.warn("Supabase not initialized.");
-      empty.textContent = "Supabase not connected. Check config.js.";
+      console.warn("Website API not initialized.");
+      empty.textContent = "Website API not loaded. Please refresh.";
       empty.hidden = false;
       return;
     }
 
-    const { data, error } = await sb
-      .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await sb.listProducts();
 
     if (error) {
       console.error(error);
@@ -1082,17 +1052,23 @@ function wireCartUI() {
       return;
     }
 
-    const sb = getSupabase();
+    const sb = getBackend();
     if (sb) {
       const ids = cart.items.map((it) => it.id).filter(Boolean);
       if (ids.length) {
-        const { data, error } = await sb.from("products").select("id,sold_out,status").in("id", ids);
-        if (!error && Array.isArray(data)) {
+        const { data, error } = await sb.checkAvailability(ids);
+        if (error || !Array.isArray(data)) {
+          alert('Could not check product availability. Please try again.');
+          return;
+        }
+        if (Array.isArray(data)) {
           const unavailable = new Set(
             data
               .filter((p) => p.sold_out === true || (p.status && p.status !== "active"))
               .map((p) => String(p.id))
           );
+          const foundIds = new Set(data.map(p => String(p.id)));
+          ids.forEach(id => { if (!foundIds.has(String(id))) unavailable.add(String(id)); });
           if (unavailable.size) {
             cart.items = cart.items.filter((it) => !unavailable.has(String(it.id)));
             saveCart();
@@ -1305,7 +1281,7 @@ function updateCartUI() {
 
 // ---------------- ADMIN (admin.html) ----------------
 function initAdmin() {
-  const sb = getSupabase();
+  const sb = getBackend();
   const msgEl = document.getElementById('adminMsg');
   const authMsg = document.getElementById('authMsg');
   const authCard = document.getElementById('authCard');
@@ -1329,7 +1305,7 @@ function initAdmin() {
   };
 
   if (!sb) {
-    setAuthMsg('Supabase not configured in config.js', true);
+    setAuthMsg('Website API not loaded. Please refresh.', true);
     return;
   }
 
@@ -1353,7 +1329,7 @@ function initAdmin() {
   let stagedImages = [];
   let authReady = false;
 
-  // Hide admin panel until Supabase confirms the user is an approved admin.
+  // Hide admin panel until the server confirms an authenticated admin session.
   if (adminApp) {
     adminApp.hidden = true;
     adminApp.style.display = 'none';
@@ -1399,21 +1375,6 @@ function initAdmin() {
     }
 
     const user = data.session.user;
-
-    // Optional check: this works when you run the admins table SQL below.
-    // RLS is still the real protection even if this check fails due to setup.
-    const { data: adminRows, error: adminErr } = await sb
-      .from('admins')
-      .select('user_id')
-      .eq('user_id', user.id)
-      .limit(1);
-
-    if (adminErr || !adminRows || adminRows.length === 0) {
-      showLogin();
-      setAuthMsg('Logged in, but this account is not listed as an admin in Supabase.', true);
-      await sb.auth.signOut();
-      return null;
-    }
 
     showAdmin(user.email);
     return user;
@@ -1489,14 +1450,9 @@ function initAdmin() {
     const { data: sessionData } = await sb.auth.getSession();
     if (!sessionData?.session) throw new Error('Please log in first.');
 
-    const safeName = String(file.name || 'image').replace(/[^a-z0-9_.-]/gi, '_');
-    const path = `public/products/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
-
-    const { error } = await sb.storage.from('product_images').upload(path, file, { upsert: false });
+    const { data, error } = await sb.upload(file);
     if (error) throw error;
-
-    const { data } = sb.storage.from('product_images').getPublicUrl(path);
-    return toCDN(data?.publicUrl || '');
+    return data.url;
   }
 
   uploadFilesBtn?.addEventListener('click', async () => {
@@ -1526,9 +1482,7 @@ function initAdmin() {
     if (!adminProducts) return;
     setMsg('Loading products…');
 
-    const { data, error } = await sb.from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data, error } = await sb.listProducts(true);
 
     if (error) {
       console.error(error);
@@ -1538,6 +1492,17 @@ function initAdmin() {
 
     setMsg('');
     const list = data || [];
+    if (!list.length) {
+      adminProducts.innerHTML = '<p>No products yet.</p><button type="button" class="btn btn--solid" id="importCatalogBtn">Import my 232 products</button>';
+      document.getElementById('importCatalogBtn').addEventListener('click', async e => {
+        if (!confirm('Import your 232 existing products into this empty database?')) return;
+        e.target.disabled = true;
+        const result = await sb.importCatalog();
+        if (result.error) { setMsg(result.error.message, true); e.target.disabled = false; }
+        else { await loadAdminProducts(); }
+      });
+      return;
+    }
     adminProducts.innerHTML = list.map((p) => {
       const img = toCDN((Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || ''));
       const sizeSummary = Array.isArray(p.sizes) && p.sizes.length ? `Sizes: ${p.sizes.join(', ')}` : null;
@@ -1576,7 +1541,7 @@ function initAdmin() {
         const id = btn.getAttribute('data-toggle-sold');
         const current = btn.getAttribute('data-sold') === '1';
         setMsg(current ? 'Marking as available…' : 'Marking as sold out…');
-        const { error: updErr } = await sb.from('products').update({ sold_out: !current }).eq('id', id);
+        const { error: updErr } = await sb.updateProduct(id, { sold_out: !current });
         if (updErr) {
           setMsg(`Update failed: ${updErr.message}`, true);
         } else {
@@ -1591,7 +1556,7 @@ function initAdmin() {
         if (!confirm('Are you sure you want to delete this product?')) return;
         const id = btn.getAttribute('data-del');
         setMsg('Deleting…');
-        const { error: delErr } = await sb.from('products').delete().eq('id', id);
+        const { error: delErr } = await sb.deleteProduct(id);
         if (delErr) {
           setMsg(`Delete failed: ${delErr.message}`, true);
         } else {
@@ -1639,7 +1604,7 @@ function initAdmin() {
     createProductBtn.disabled = true;
     setMsg('Creating…');
 
-    const { error } = await sb.from('products').insert(payload);
+    const { error } = await sb.createProduct(payload);
 
     if (error) {
       console.error(error);

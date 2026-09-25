@@ -1,0 +1,2 @@
+/api/* https://2fly-api.gshoeswho.workers.dev/api/:splat 200!
+/media/* https://2fly-api.gshoeswho.workers.dev/media/:splat 200!
