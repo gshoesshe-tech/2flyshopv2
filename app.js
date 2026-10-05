@@ -335,7 +335,7 @@ function getTotalPricingGroupQty(group, extraQty = 0, excludeCartKey = "") {
   const current = cart.items
     .filter((item) => {
       const itemGroup = inferPricingGroup(item);
-      const itemKey = String(item?.cart_key || getCartItemKey(item?.id, item?.selected_size || ""));
+      const itemKey = String(item?.cart_key || getCartItemKey(item?.id, item?.selected_size || "", item.selected_color || ""));
       return itemGroup === normalizedGroup && (!excludeCartKey || itemKey !== excludeCartKey);
     })
     .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
@@ -431,8 +431,8 @@ function getUnitPriceForProduct(prod, qty) {
   if (!rule) return Number(prod?.price) || 0;
 
   const cleanSize = String(prod?.selected_size || "").trim();
-  const key = String(prod?.cart_key || getCartItemKey(prod?.id, cleanSize));
-  const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || "")) === key);
+  const key = String(prod?.cart_key || getCartItemKey(prod?.id, cleanSize, prod?.selected_color || ""));
+  const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || "", item.selected_color || "")) === key);
   const projectedQty = getTotalPricingGroupQty(group, Number(qty) || 0, existing ? key : "");
   return getPricingGroupUnitPrice(group, projectedQty);
 }
@@ -459,7 +459,8 @@ function loadCart() {
         category: getProductCategory(it),
         pricing_group: inferPricingGroup(it),
         selected_size: selectedSize,
-        cart_key: String(it?.cart_key || getCartItemKey(it?.id, selectedSize))
+        selected_color: String(it?.selected_color || "").trim(),
+        cart_key: getCartItemKey(it?.id, selectedSize, it?.selected_color || "")
       };
     });
     syncCartWholesalePricing();
@@ -483,17 +484,17 @@ function cartSubtotal() {
   return cart.items.reduce((a, it) => a + getCartUnitPrice(it) * (Number(it.qty) || 0), 0);
 }
 
-function getCartItemKey(id, selectedSize = "") {
+function getCartItemKey(id, selectedSize = "", selectedColor = "") {
   const sizeKey = String(selectedSize || "").trim().toUpperCase();
-  return `${String(id)}::${sizeKey}`;
+  return JSON.stringify([String(id), sizeKey, String(selectedColor || "").trim().toUpperCase()]);
 }
 
-function findCartItem(id, selectedSize = "") {
-  const key = getCartItemKey(id, selectedSize);
-  return cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || "")) === key);
+function findCartItem(id, selectedSize = "", selectedColor = "") {
+  const key = getCartItemKey(id, selectedSize, selectedColor);
+  return cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || "", x.selected_color || "")) === key);
 }
 
-function addToCart(prod, qty, selectedSize = "") {
+function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
   if (prod?.sold_out === true) {
     alert("This item is currently sold out.");
     return;
@@ -502,7 +503,7 @@ function addToCart(prod, qty, selectedSize = "") {
   const minQty = getMinQtyForProduct(prod);
   const q = clampInt(qty, minQty);
   const cleanSize = String(selectedSize || "").trim();
-  const existing = findCartItem(prod.id, cleanSize);
+  const existing = findCartItem(prod.id, cleanSize, selectedColor);
   const normalizedCategory = getProductCategory(prod);
   const pricingGroup = inferPricingGroup(prod);
 
@@ -513,7 +514,7 @@ function addToCart(prod, qty, selectedSize = "") {
   } else {
     cart.items.push({
       id: prod.id,
-      cart_key: getCartItemKey(prod.id, cleanSize),
+      cart_key: getCartItemKey(prod.id, cleanSize, selectedColor),
       name: prod.name,
       price: Number(prod.price) || 0,
       code: prod.code || "",
@@ -523,6 +524,7 @@ function addToCart(prod, qty, selectedSize = "") {
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q,
       selected_size: cleanSize,
+      selected_color: String(selectedColor || "").trim(),
       sold_out: prod.sold_out === true
     });
   }
@@ -748,6 +750,10 @@ function initShop() {
 
   let currentProd = null;
   let selectedSize = "";
+  let selectedColor = "";
+  const pColorWrap = $("#pColorWrap");
+  const pColorOptions = $("#pColorOptions");
+  const pColorError = $("#pColorError");
 
 
   function ensureWholesaleBox() {
@@ -776,8 +782,8 @@ function initShop() {
     const minQty = rule.minimum || 1;
     const q = clampInt(pQty?.value || minQty, minQty);
     const cleanSize = String(selectedSize || '').trim();
-    const key = getCartItemKey(currentProd.id, cleanSize);
-    const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '')) === key);
+    const key = getCartItemKey(currentProd.id, cleanSize, selectedColor);
+    const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '', item.selected_color || "")) === key);
     const projectedTotal = getTotalPricingGroupQty(group, q, existing ? key : '');
     const saleActive = group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive();
     const price = getPricingGroupUnitPrice(group, projectedTotal);
@@ -843,6 +849,43 @@ function initShop() {
     });
   }
 
+  function renderColorOptions(prod) {
+    const colors = Array.isArray(prod?.colors) ? prod.colors : [];
+    selectedColor = "";
+
+    if (pColorError) {
+      pColorError.hidden = true;
+      pColorError.textContent = "Please select a color.";
+    }
+
+    if (!pColorWrap || !pColorOptions) return;
+
+    if (!colors.length) {
+      pColorWrap.hidden = true;
+      pColorOptions.innerHTML = "";
+      return;
+    }
+
+    pColorWrap.hidden = false;
+    pColorOptions.innerHTML = "";
+
+    colors.forEach((color) => {
+      const btn = document.createElement("button");
+      btn.className = "sizeChip";
+      btn.type = "button";
+      btn.textContent = color;
+      btn.setAttribute("data-color", color);
+      btn.addEventListener("click", () => {
+        selectedColor = color;
+        pColorOptions.querySelectorAll(".sizeChip").forEach((chip) => {
+          chip.classList.toggle("is-active", chip.getAttribute("data-color") === color);
+        });
+        if (pColorError) pColorError.hidden = true;
+      });
+      pColorOptions.appendChild(btn);
+    });
+  }
+
   function openProductModal(prod) {
     currentProd = normalizeProduct(prod);
 
@@ -884,6 +927,7 @@ function initShop() {
     pCode.textContent = currentProd.code || "";
 
     renderSizeOptions(currentProd);
+    renderColorOptions(currentProd);
     pQty.value = "1";
     updateWholesalePricingUI();
     syncAddBtn();
@@ -975,7 +1019,11 @@ function initShop() {
 
     const q = clampInt(pQty.value, getMinQtyForProduct(currentProd));
     currentProd.price = getUnitPriceForProduct(currentProd, q);
-    addToCart(currentProd, q, selectedSize);
+    if (currentProd.colors.length && !selectedColor) {
+      if (pColorError) pColorError.hidden = false;
+      return;
+    }
+    addToCart(currentProd, q, selectedSize, selectedColor);
     updateCartUI();
     closeProductModal();
     window.openCart(); // Open drawer
@@ -998,6 +1046,7 @@ function normalizeProduct(p) {
     category: getProductCategory(p),
     image_url: p.image_url || "",
     images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+    colors: Array.isArray(p.colors) ? p.colors.map(c => String(c).trim()).filter(Boolean) : [],
     sizes: Array.isArray(p.sizes) ? p.sizes.map((s) => String(s || "").trim()).filter(Boolean) : [],
     sold_out: p.sold_out === true
   };
@@ -1170,7 +1219,8 @@ function wireCartUI() {
       items.forEach(it => {
         const qty = Number(it.qty) || 0;
         const baseLabel = it.sku || it.code || it.name;
-        const sizeLabel = it.selected_size ? `${baseLabel} (Size: ${it.selected_size})` : baseLabel;
+        const options = [it.selected_color ? `Color: ${it.selected_color}` : "", it.selected_size ? `Size: ${it.selected_size}` : ""].filter(Boolean).join(", ");
+        const sizeLabel = options ? `${baseLabel} (${options})` : baseLabel;
         lines.push(`• ${sizeLabel} – x${qty}`);
 
         catQty += qty;
@@ -1224,18 +1274,18 @@ function updateCartUI() {
       <img class="cartItem__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(toCDN(it.image || ""))}" alt="" onerror="this.style.opacity=.2" />
       <div>
         <div class="cartItem__name">${escapeHtml(it.name || "")}</div>
-        <div class="cartItem__meta">${it.selected_size ? `Size: ${escapeHtml(it.selected_size)}` : ""}</div>
+        <div class="cartItem__meta">${[it.selected_color ? `Color: ${escapeHtml(it.selected_color)}` : "", it.selected_size ? `Size: ${escapeHtml(it.selected_size)}` : ""].filter(Boolean).join(" • ")}</div>
         <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}</div>
         <div class="cartItem__row">
           <div class="cartQty">
-            <button type="button" data-dec="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}">−</button>
-            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" />
-            <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}">+</button>
+            <button type="button" data-dec="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}">−</button>
+            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}" />
+            <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}">+</button>
           </div>
           <div style="color:rgba(255,255,255,.75);font-weight:700;">${money(getCartUnitPrice(it) * (Number(it.qty)||0))}</div>
         </div>
       </div>
-      <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || ''))}" aria-label="Remove item">🗑</button>
+      <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}" aria-label="Remove item">🗑</button>
     `;
     itemsWrap.appendChild(row);
   });
@@ -1244,7 +1294,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-dec]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-dec");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = Math.max(minQty, clampInt(item.qty, minQty) - 1);
@@ -1256,7 +1306,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-inc]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-inc");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(item.qty, minQty) + 1;
@@ -1268,7 +1318,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-qty]").forEach(inp => {
     inp.addEventListener("input", () => {
       const key = inp.getAttribute("data-qty");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(inp.value, minQty);
@@ -1280,7 +1330,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-del");
-      cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '')) !== String(key));
+      cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) !== String(key));
       syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
@@ -1326,6 +1376,7 @@ function initAdmin() {
   const aCategory = $('#aCategory');
   const aPricingGroup = $('#aPricingGroup');
   const aSizes = $('#aSizes');
+  const aColors = $('#aColors');
   const aStatus = $('#aStatus');
   const aSoldOut = $('#aSoldOut');
   const aImageUrl = $('#aImageUrl');
@@ -1542,11 +1593,14 @@ function initAdmin() {
             </div>
           </div>
           <details style="margin-top:12px;">
-            <summary>Edit description</summary>
+            <summary>Edit description and colors</summary>
             <label style="display:block;margin-top:10px;">Description / what's included
               <textarea class="input" data-description-for="${escapeHtmlAttr(p.id)}" rows="5" maxlength="5000" style="display:block;width:100%;box-sizing:border-box;resize:vertical;">${escapeHtml(p.description || '')}</textarea>
             </label>
-            <button class="btn btn--ghost" type="button" data-save-description="${escapeHtmlAttr(p.id)}">Save description</button>
+            <label style="display:block;margin:10px 0;">Available colors (comma-separated)
+              <input class="input" data-edit-colors value="${escapeHtmlAttr((p.colors || []).join(', '))}" placeholder="Black, White, Red" />
+            </label>
+            <button class="btn btn--ghost" type="button" data-save-description="${escapeHtmlAttr(p.id)}">Save details</button>
             <span role="status" data-description-status></span>
           </details>
         </div>
@@ -1563,8 +1617,9 @@ function initAdmin() {
         btn.disabled = true;
         status.textContent = 'Saving…';
         try {
-          const { error } = await sb.updateProduct(btn.dataset.saveDescription, { description });
-          status.textContent = error ? 'Save failed: ' + error.message : 'Description saved.';
+          const colors = parseColors(panel.querySelector('[data-edit-colors]').value);
+          const { error } = await sb.updateProduct(btn.dataset.saveDescription, { description, colors });
+          status.textContent = error ? 'Save failed: ' + error.message : 'Details saved.';
         } catch { status.textContent = 'Connection failed. Please try again.'; }
         finally { btn.disabled = false; }
       });
@@ -1631,6 +1686,7 @@ function initAdmin() {
       sku,
       category,
       pricing_group,
+      colors: parseColors(aColors?.value || ""),
       sizes,
       status,
       sold_out,
@@ -1641,13 +1697,13 @@ function initAdmin() {
     createProductBtn.disabled = true;
     setMsg('Creating…');
 
-    if (description) {
+    if (description || payload.colors.length) {
       try {
         const response = await fetch('/api/capabilities', { cache: 'no-store' });
         const capabilities = response.ok ? await response.json() : {};
-        if (!capabilities.product_descriptions) throw new Error('not-ready');
+        if (!capabilities.product_descriptions || (payload.colors.length && !capabilities.product_colors)) throw new Error('not-ready');
       } catch {
-        setMsg('Deploy the updated 2fly-api Worker first so descriptions can be saved. Your form is still here.', true);
+        setMsg('Deploy the updated 2fly-api Worker first so descriptions and colors can be saved. Your form is still here.', true);
         createProductBtn.disabled = false;
         return;
       }
@@ -1665,6 +1721,7 @@ function initAdmin() {
       if (aCode) aCode.value = '';
       if (aSku) aSku.value = '';
       if (aSizes) aSizes.value = '';
+      if (aColors) aColors.value = '';
       if (aPricingGroup) aPricingGroup.value = 'NONE';
       if (aSoldOut) aSoldOut.checked = false;
       stagedImages = [];
@@ -1691,3 +1748,8 @@ function bootstrap() {
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);
+
+
+function parseColors(value) {
+  return [...new Map(String(value).split(",").map(c => c.trim()).filter(Boolean).map(c => [c.toUpperCase(), c])).values()];
+}
