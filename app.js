@@ -865,6 +865,14 @@ function initShop() {
     });
 
     pName.textContent = currentProd.name;
+    const description = currentProd.description || "";
+    const descriptionWrap = document.getElementById("pDescriptionWrap");
+    if (descriptionWrap) {
+      descriptionWrap.hidden = !description.trim();
+      document.getElementById("pDescription").textContent = description;
+      document.getElementById("pDescriptionTitle").textContent =
+        getProductCategory(currentProd) === "BUSINESS BUNDLES" ? "What's included" : "Description";
+    }
     const isWholesaleProduct = Boolean(getPricingRule(currentProd));
     const openingRule = getPricingRule(currentProd);
     const openingPrice = openingRule
@@ -981,6 +989,7 @@ function normalizeProduct(p) {
   return {
     id: p.id,
     name: p.name || "",
+    description: typeof p.description === "string" ? p.description : "",
     price: Number(p.price) || 0,
     base_price: Number(p.price) || 0,
     pricing_group: inferPricingGroup(p),
@@ -1310,6 +1319,7 @@ function initAdmin() {
   }
 
   const aName = $('#aName');
+  const aDescription = $('#aDescription');
   const aPrice = $('#aPrice');
   const aCode = $('#aCode');
   const aSku = $('#aSku');
@@ -1531,10 +1541,34 @@ function initAdmin() {
               <button class="btn btn--ghost" type="button" data-del="${escapeHtmlAttr(p.id)}">Delete</button>
             </div>
           </div>
+          <details style="margin-top:12px;">
+            <summary>Edit description</summary>
+            <label style="display:block;margin-top:10px;">Description / what's included
+              <textarea class="input" data-description-for="${escapeHtmlAttr(p.id)}" rows="5" maxlength="5000" style="display:block;width:100%;box-sizing:border-box;resize:vertical;">${escapeHtml(p.description || '')}</textarea>
+            </label>
+            <button class="btn btn--ghost" type="button" data-save-description="${escapeHtmlAttr(p.id)}">Save description</button>
+            <span role="status" data-description-status></span>
+          </details>
         </div>
       `;
     }).join('');
 
+
+    adminProducts.querySelectorAll('button[data-save-description]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const panel = btn.closest('details');
+        const description = panel.querySelector('textarea').value.trim();
+        const status = panel.querySelector('[data-description-status]');
+        if (description.length > 5000) { status.textContent = 'Maximum 5,000 characters.'; return; }
+        btn.disabled = true;
+        status.textContent = 'Saving…';
+        try {
+          const { error } = await sb.updateProduct(btn.dataset.saveDescription, { description });
+          status.textContent = error ? 'Save failed: ' + error.message : 'Description saved.';
+        } catch { status.textContent = 'Connection failed. Please try again.'; }
+        finally { btn.disabled = false; }
+      });
+    });
 
     adminProducts.querySelectorAll('button[data-toggle-sold]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1576,7 +1610,9 @@ function initAdmin() {
     const code = (aCode?.value || '').trim();
     const sku = (aSku?.value || '').trim();
     const category = (aCategory?.value || 'Earrings');
-    const pricing_group = normalizePricingGroup(aPricingGroup?.value || 'NONE');
+    const pricing_group = normalizeCategoryName(category) === 'BUSINESS BUNDLES' ? 'NONE' : normalizePricingGroup(aPricingGroup?.value || 'NONE');
+    const description = (aDescription?.value || '').trim();
+    if (description.length > 5000) return setMsg('Description must be 5,000 characters or fewer.', true);
     const sizes = String(aSizes?.value || '')
       .split(',')
       .map(v => v.trim())
@@ -1588,6 +1624,7 @@ function initAdmin() {
     if (!Number.isFinite(price) || price < 0) return setMsg('Valid price is required.', true);
 
     const payload = {
+      description,
       name,
       price,
       code,
@@ -1604,6 +1641,17 @@ function initAdmin() {
     createProductBtn.disabled = true;
     setMsg('Creating…');
 
+    if (description) {
+      try {
+        const response = await fetch('/api/capabilities', { cache: 'no-store' });
+        const capabilities = response.ok ? await response.json() : {};
+        if (!capabilities.product_descriptions) throw new Error('not-ready');
+      } catch {
+        setMsg('Deploy the updated 2fly-api Worker first so descriptions can be saved. Your form is still here.', true);
+        createProductBtn.disabled = false;
+        return;
+      }
+    }
     const { error } = await sb.createProduct(payload);
 
     if (error) {
@@ -1612,6 +1660,7 @@ function initAdmin() {
     } else {
       setMsg('Created ✅');
       if (aName) aName.value = '';
+      if (aDescription) aDescription.value = '';
       if (aPrice) aPrice.value = '';
       if (aCode) aCode.value = '';
       if (aSku) aSku.value = '';
