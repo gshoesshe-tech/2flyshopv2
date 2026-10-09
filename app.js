@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: DESIGNER_BOXER_SALE_SEP8_15 - ₱29 designer boxers from 1 pc on Sept 8-15, 2026 (Asia/Manila), with entry popup and automatic normal-price restore
+   PATCH: STANDARD_BOXER_SALE_OCT10 - ₱29 regular boxers from 1 pc on October 10, 2026 (Asia/Manila), with entry popup and automatic normal-price restore
    - Handles Landing, Shop, and Admin logic
    - Uses the Cloudflare API client in config.js
 */
@@ -68,13 +68,13 @@ const PRICING_GROUPS = Object.freeze({
 
 // ---------------- TEMPORARY STANDARD BOXER SALE ----------------
 // Sale runs by Philippine calendar date, regardless of the customer's device timezone.
-// Sept 8-15, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
-// On Sept 16 (Philippine time), the new regular pricing takes over automatically.
+// October 10, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
+// On October 11 (Philippine time), regular pricing takes over automatically.
 const STANDARD_BOXER_SALE = Object.freeze({
-  startDatePH: "2026-09-08",
-  endDatePH: "2026-09-15",
+  startDatePH: "2026-10-10",
+  endDatePH: "2026-10-10",
   price: 29,
-  label: "9.9 SALE EXTENDED"
+  label: "10.10 SALE"
 });
 
 function getPhilippineDateKey(date = new Date()) {
@@ -135,10 +135,10 @@ function showDesignerBoxerSalePopup() {
     <div class="designerSalePopup__card">
       <button class="designerSalePopup__closeX" type="button" data-sale-close aria-label="Close sale notice">×</button>
       <div class="designerSalePopup__eyebrow">Limited Time Offer</div>
-      <h2 class="designerSalePopup__title" id="designerSaleTitle">9.9 Sale Extended</h2>
-      <div class="designerSalePopup__product">Designer Boxers</div>
+      <h2 class="designerSalePopup__title" id="designerSaleTitle">10.10 Sale</h2>
+      <div class="designerSalePopup__product">Regular Boxers</div>
       <div class="designerSalePopup__price">₱29 EACH</div>
-      <div class="designerSalePopup__until">Promo valid until September 15</div>
+      <div class="designerSalePopup__until">October 10 only · Until 11:59 PM Philippine time</div>
       <p class="designerSalePopup__sub">Shop now before prices go back up.</p>
       <div class="designerSalePopup__actions">
         <button class="designerSalePopup__btn designerSalePopup__btn--primary" type="button" data-sale-shop>Shop Now</button>
@@ -176,7 +176,7 @@ function showDesignerBoxerSalePopup() {
 const PRICING_RULES = Object.freeze({
   BOXERS_STANDARD: {
     label: "Designer Boxers",
-    // Regular pricing after the Sept 8–15 sale.
+    // Regular pricing outside the October 10 sale.
     // Customers can buy from 1 pc. Mixed designer-boxer designs/colors combine toward the 100+ tier.
     minimum: 1,
     unit: "pcs",
@@ -360,8 +360,8 @@ function getTierForQty(rule, qty) {
 function getPricingGroupUnitPrice(group, qty) {
   const normalizedGroup = normalizePricingGroup(group);
 
-  // Temporary 9.9 sale override. This sits above the normal pricing rules so
-  // every standard boxer in the cart stays ₱29 during Sept 8-15, 2026.
+  // Temporary 10.10 sale override. This sits above the normal pricing rules so
+  // every standard boxer in the cart stays ₱29 on October 10, 2026.
   if (normalizedGroup === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) {
     return STANDARD_BOXER_SALE.price;
   }
@@ -791,7 +791,7 @@ function initShop() {
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     const rows = saleActive
-      ? `<div class="wholesalePricing__row is-active"><span>Sept 8–15 · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
+      ? `<div class="wholesalePricing__row is-active"><span>October 10 only · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
       : rule.tiers.map((tier, index) => {
           const belowFirstTier = index === 0 && projectedTotal < rule.tiers[0].min;
           const active = belowFirstTier || (projectedTotal >= tier.min && projectedTotal <= tier.max);
@@ -803,7 +803,7 @@ function initShop() {
       ? `
         <div class="wholesalePricing__title">${escapeHtml(STANDARD_BOXER_SALE.label)}</div>
         ${rows}
-        <div class="wholesalePricing__note">Designer boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc through Sept 15 (Philippine time). New regular pricing starts automatically on Sept 16.</div>
+        <div class="wholesalePricing__note">Regular boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc on October 10 only (Philippine time). Regular pricing resumes automatically on October 11.</div>
       `
       : `
         <div class="wholesalePricing__title">Wholesale Pricing</div>
