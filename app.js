@@ -57,6 +57,7 @@ function initLanding() {
 // ---------------- SOLD OUT + DATA-DRIVEN WHOLESALE PRICING ----------------
 const PRICING_GROUPS = Object.freeze({
   NONE: "NONE",
+  BRANDED_SHIRTS: "BRANDED_SHIRTS",
   BOXERS_STANDARD: "BOXERS_STANDARD",
   BOXERS_PREMIUM: "BOXERS_PREMIUM",
   TANK_STANDARD: "TANK_STANDARD",
@@ -174,6 +175,15 @@ function showDesignerBoxerSalePopup() {
 }
 
 const PRICING_RULES = Object.freeze({
+  BRANDED_SHIRTS: {
+    label: "Branded Shirts",
+    minimum: 1,
+    unit: "pcs",
+    tiers: [
+      { min: 1, max: 4, price: 199, label: "1–4 total pcs" },
+      { min: 5, max: Infinity, price: 175, label: "5+ total pcs" }
+    ]
+  },
   BOXERS_STANDARD: {
     label: "Designer Boxers",
     // Regular pricing outside the October 10 sale.
@@ -279,6 +289,9 @@ function productSignature(prod = {}) {
 }
 
 function inferPricingGroup(prod = {}) {
+  // Apply shirt tiers to existing and new branded shirts, including stored NONE rows.
+  // Business bundles retain their separate fixed bundle prices.
+  if (normalizeCategoryName(prod?.category) === "BRANDED SHIRTS") return PRICING_GROUPS.BRANDED_SHIRTS;
   // When pricing_group exists in the database, respect it exactly — including NONE.
   // Fallback inference is only for older rows/files where the field is absent.
   if (Object.prototype.hasOwnProperty.call(prod || {}, "pricing_group")) {
