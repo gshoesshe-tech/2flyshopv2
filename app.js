@@ -186,13 +186,14 @@ const PRICING_RULES = Object.freeze({
   },
   BOXERS_STANDARD: {
     label: "Designer Boxers",
-    // Regular pricing outside the October 10 sale.
-    // Customers can buy from 1 pc. Mixed designer-boxer designs/colors combine toward the 100+ tier.
+    // Mixed regular boxer designs/colors count toward the minimum and tiers.
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 35, label: "1–99 total pcs" },
-      { min: 100, max: Infinity, price: 30, label: "100+ total pcs" }
+      { min: 10, max: 99, price: 35, label: "10–99 total pcs" },
+      { min: 100, max: 199, price: 30, label: "100–199 total pcs" },
+      { min: 200, max: Infinity, price: 29, label: "200+ total pcs" }
     ]
   },
   BOXERS_PREMIUM: {
@@ -398,8 +399,7 @@ function getCartPricingGroupQty(group) {
 
 function getWholesaleMinimumError() {
   for (const [group, rule] of Object.entries(PRICING_RULES)) {
-    // Pricing tiers never block a customer from buying a smaller quantity.
-    // orderMinimum is reserved only for future products that truly require one.
+    // Enforce a group minimum only when the pricing rule explicitly defines one.
     if (group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) continue;
 
     const required = Math.max(0, Number(rule?.orderMinimum) || 0);
