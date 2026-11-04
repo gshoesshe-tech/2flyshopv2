@@ -760,7 +760,8 @@ function initShop() {
         </div>
         <div class="card__body">
           <div class="card__name">${escapeHtml(prod.name || "")}</div>
-          <div class="card__price">${isSoldOut ? "Sold Out" : money(getUnitPriceForProduct(prod, getMinQtyForProduct(prod)))}</div>
+          <div class="card__price">${isSoldOut ? "Sold Out" : getEarringCase(prod) ? `From ${money(getPricingGroupUnitPrice(PRICING_GROUPS.EARRINGS_NO_CASE, 10))} each` : money(getUnitPriceForProduct(prod, getMinQtyForProduct(prod)))}</div>
+          ${!isSoldOut && getEarringCase(prod) ? '<div class="muted">No case · Min. 10 pcs</div>' : ""}
         </div>
       `;
       if (!isSoldOut) {
