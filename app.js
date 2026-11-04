@@ -64,7 +64,8 @@ const PRICING_GROUPS = Object.freeze({
   NIKE_TANK: "NIKE_TANK",
   JORDAN_TANK: "JORDAN_TANK",
   PATCH_TANK: "PATCH_TANK",
-  EARRINGS: "EARRINGS"
+  EARRINGS: "EARRINGS",
+  EARRINGS_NO_CASE: "EARRINGS_NO_CASE"
 });
 
 // ---------------- TEMPORARY STANDARD BOXER SALE ----------------
@@ -243,13 +244,23 @@ const PRICING_RULES = Object.freeze({
     ]
   },
   EARRINGS: {
-    label: "Earrings",
+    label: "Earrings with crystal case",
     minimum: 1,
+    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 1, max: 99, price: 18, label: "1–99 total pcs" },
-      { min: 100, max: 499, price: 16, label: "100–499 total pcs" },
-      { min: 500, max: Infinity, price: 15, label: "500+ total pcs" }
+      { min: 10, max: 99, price: 18, label: "10–99 total pcs · With case" },
+      { min: 100, max: 499, price: 16, label: "100–499 total pcs · With case" },
+      { min: 500, max: Infinity, price: 15, label: "500+ total pcs · With case" }
+    ]
+  },
+  EARRINGS_NO_CASE: {
+    label: "Earrings without case",
+    minimum: 1,
+    orderMinimum: 10,
+    unit: "pcs",
+    tiers: [
+      { min: 10, max: Infinity, price: 13, label: "10+ total pcs · No case" }
     ]
   }
 });
@@ -263,6 +274,7 @@ function normalizeCategoryName(category = "") {
   // All tank-top variants live under ONE customer-facing category: TANK TOPS.
   // Pricing is still controlled independently by pricing_group, so Nike,
   // Jordan, Patch, and Plain tank tops can keep different wholesale tiers.
+  if (c.includes("EARRING") && c.includes("BUNDLE")) return "EARRINGS BUNDLES";
   if (c.includes("TANK")) return "TANK TOPS";
 
   if (c.includes("BOXER")) return "BOXERS";
@@ -289,7 +301,21 @@ function productSignature(prod = {}) {
     .join(" ");
 }
 
+function getEarringCase(prod = {}) {
+  const isEarring = normalizeCategoryName(prod.category) === "EARRINGS"
+    || ["EARRINGS", "EARRINGS_NO_CASE"].includes(prod.pricing_group);
+  if (!isEarring) return "";
+  return prod.selected_case === "no_case" ? "no_case" : "with_case";
+}
+
+function earringCaseLabel(prod) {
+  const option = getEarringCase(prod);
+  return option ? (option === "no_case" ? "No case" : "With crystal case") : "";
+}
+
 function inferPricingGroup(prod = {}) {
+  const caseOption = getEarringCase(prod);
+  if (caseOption) return caseOption === "no_case" ? PRICING_GROUPS.EARRINGS_NO_CASE : PRICING_GROUPS.EARRINGS;
   // Apply shirt tiers to existing and new branded shirts, including stored NONE rows.
   // Business bundles retain their separate fixed bundle prices.
   if (normalizeCategoryName(prod?.category) === "BRANDED SHIRTS") return PRICING_GROUPS.BRANDED_SHIRTS;
@@ -349,7 +375,7 @@ function getTotalPricingGroupQty(group, extraQty = 0, excludeCartKey = "") {
   const current = cart.items
     .filter((item) => {
       const itemGroup = inferPricingGroup(item);
-      const itemKey = String(item?.cart_key || getCartItemKey(item?.id, item?.selected_size || "", item.selected_color || ""));
+      const itemKey = String(item?.cart_key || getCartItemKey(item?.id, item?.selected_size || "", item.selected_color || "", getEarringCase(item)));
       return itemGroup === normalizedGroup && (!excludeCartKey || itemKey !== excludeCartKey);
     })
     .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
@@ -444,8 +470,8 @@ function getUnitPriceForProduct(prod, qty) {
   if (!rule) return Number(prod?.price) || 0;
 
   const cleanSize = String(prod?.selected_size || "").trim();
-  const key = String(prod?.cart_key || getCartItemKey(prod?.id, cleanSize, prod?.selected_color || ""));
-  const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || "", item.selected_color || "")) === key);
+  const key = String(prod?.cart_key || getCartItemKey(prod?.id, cleanSize, prod?.selected_color || "", getEarringCase(prod)));
+  const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || "", item.selected_color || "", getEarringCase(item))) === key);
   const projectedQty = getTotalPricingGroupQty(group, Number(qty) || 0, existing ? key : "");
   return getPricingGroupUnitPrice(group, projectedQty);
 }
@@ -465,15 +491,16 @@ const cart = {
 function loadCart() {
   try {
     const raw = JSON.parse(localStorage.getItem("cart_v1") || "[]") || [];
-    cart.items = raw.map((it) => {
+    cart.items = raw.filter(it => normalizeCategoryName(it.category) !== "CRYSTAL CASE").map((it) => {
       const selectedSize = String(it?.selected_size || "").trim();
       return {
         ...it,
         category: getProductCategory(it),
         pricing_group: inferPricingGroup(it),
+        selected_case: getEarringCase(it),
         selected_size: selectedSize,
         selected_color: String(it?.selected_color || "").trim(),
-        cart_key: getCartItemKey(it?.id, selectedSize, it?.selected_color || "")
+        cart_key: getCartItemKey(it?.id, selectedSize, it?.selected_color || "", getEarringCase(it))
       };
     });
     syncCartWholesalePricing();
@@ -497,14 +524,14 @@ function cartSubtotal() {
   return cart.items.reduce((a, it) => a + getCartUnitPrice(it) * (Number(it.qty) || 0), 0);
 }
 
-function getCartItemKey(id, selectedSize = "", selectedColor = "") {
+function getCartItemKey(id, selectedSize = "", selectedColor = "", selectedCase = "") {
   const sizeKey = String(selectedSize || "").trim().toUpperCase();
-  return JSON.stringify([String(id), sizeKey, String(selectedColor || "").trim().toUpperCase()]);
+  return JSON.stringify([String(id), sizeKey, String(selectedColor || "").trim().toUpperCase(), selectedCase]);
 }
 
-function findCartItem(id, selectedSize = "", selectedColor = "") {
-  const key = getCartItemKey(id, selectedSize, selectedColor);
-  return cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || "", x.selected_color || "")) === key);
+function findCartItem(id, selectedSize = "", selectedColor = "", selectedCase = "") {
+  const key = getCartItemKey(id, selectedSize, selectedColor, selectedCase);
+  return cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || "", x.selected_color || "", getEarringCase(x))) === key);
 }
 
 function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
@@ -516,7 +543,7 @@ function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
   const minQty = getMinQtyForProduct(prod);
   const q = clampInt(qty, minQty);
   const cleanSize = String(selectedSize || "").trim();
-  const existing = findCartItem(prod.id, cleanSize, selectedColor);
+  const existing = findCartItem(prod.id, cleanSize, selectedColor, getEarringCase(prod));
   const normalizedCategory = getProductCategory(prod);
   const pricingGroup = inferPricingGroup(prod);
 
@@ -527,7 +554,7 @@ function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
   } else {
     cart.items.push({
       id: prod.id,
-      cart_key: getCartItemKey(prod.id, cleanSize, selectedColor),
+      cart_key: getCartItemKey(prod.id, cleanSize, selectedColor, getEarringCase(prod)),
       name: prod.name,
       price: Number(prod.price) || 0,
       code: prod.code || "",
@@ -536,6 +563,7 @@ function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
       pricing_group: pricingGroup,
       image: toCDN((prod.images && prod.images[0]) || prod.image_url || ""),
       qty: q,
+      selected_case: getEarringCase(prod),
       selected_size: cleanSize,
       selected_color: String(selectedColor || "").trim(),
       sold_out: prod.sold_out === true
@@ -675,7 +703,7 @@ function initShop() {
     }
 
     currentProducts = (data || [])
-      .filter(p => (p.status || "active") === "active");
+      .filter(p => (p.status || "active") === "active" && normalizeCategoryName(p.category) !== "CRYSTAL CASE");
 
 
     // Repair category/pricing metadata saved by older broken versions without
@@ -686,7 +714,7 @@ function initShop() {
       const source = productsById.get(String(item.id));
       if (!source) return;
 
-      const repairedGroup = inferPricingGroup(source);
+      const repairedGroup = inferPricingGroup({ ...source, selected_case: item.selected_case });
       const repairedCategory = getProductCategory(source);
       if (item.pricing_group !== repairedGroup || item.category !== repairedCategory) {
         item.pricing_group = repairedGroup;
@@ -795,8 +823,8 @@ function initShop() {
     const minQty = rule.minimum || 1;
     const q = clampInt(pQty?.value || minQty, minQty);
     const cleanSize = String(selectedSize || '').trim();
-    const key = getCartItemKey(currentProd.id, cleanSize, selectedColor);
-    const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '', item.selected_color || "")) === key);
+    const key = getCartItemKey(currentProd.id, cleanSize, selectedColor, getEarringCase(currentProd));
+    const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '', item.selected_color || "", getEarringCase(item))) === key);
     const projectedTotal = getTotalPricingGroupQty(group, q, existing ? key : '');
     const saleActive = group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive();
     const price = getPricingGroupUnitPrice(group, projectedTotal);
@@ -823,6 +851,36 @@ function initShop() {
         ${rows}
         <div class="wholesalePricing__note">Tier is based on all ${escapeHtml(rule.label.toLowerCase())} in cart. Current total after adding: ${projectedTotal} pcs${rule.orderMinimum ? ` · Minimum order: ${rule.orderMinimum} total pcs` : ''}</div>
       `;
+  }
+
+  function renderCaseOptions(prod) {
+    const wrap = document.getElementById("pCaseWrap");
+    const options = document.getElementById("pCaseOptions");
+    if (!wrap || !options) return;
+    wrap.hidden = !getEarringCase(prod);
+    options.innerHTML = "";
+    if (wrap.hidden) return;
+    prod.selected_case = getEarringCase(prod);
+    for (const [value, label] of [["with_case", "With crystal case"], ["no_case", "No case"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "sizeChip";
+      button.textContent = label;
+      button.dataset.case = value;
+      button.classList.toggle("is-active", prod.selected_case === value);
+      button.setAttribute("aria-pressed", String(prod.selected_case === value));
+      button.addEventListener("click", () => {
+        prod.selected_case = value;
+        options.querySelectorAll("button").forEach(chip => {
+          const active = chip.dataset.case === value;
+          chip.classList.toggle("is-active", active);
+          chip.setAttribute("aria-pressed", String(active));
+        });
+        updateWholesalePricingUI();
+        syncAddBtn();
+      });
+      options.appendChild(button);
+    }
   }
 
   function renderSizeOptions(prod) {
@@ -939,6 +997,7 @@ function initShop() {
     pSku.textContent = currentProd.sku || "";
     pCode.textContent = currentProd.code || "";
 
+    renderCaseOptions(currentProd);
     renderSizeOptions(currentProd);
     renderColorOptions(currentProd);
     pQty.value = "1";
@@ -1054,6 +1113,7 @@ function normalizeProduct(p) {
     price: Number(p.price) || 0,
     base_price: Number(p.price) || 0,
     pricing_group: inferPricingGroup(p),
+    selected_case: getEarringCase(p),
     code: p.code || "",
     sku: p.sku || "",
     category: getProductCategory(p),
@@ -1232,7 +1292,7 @@ function wireCartUI() {
       items.forEach(it => {
         const qty = Number(it.qty) || 0;
         const baseLabel = it.sku || it.code || it.name;
-        const options = [it.selected_color ? `Color: ${it.selected_color}` : "", it.selected_size ? `Size: ${it.selected_size}` : ""].filter(Boolean).join(", ");
+        const options = [earringCaseLabel(it), it.selected_color ? `Color: ${it.selected_color}` : "", it.selected_size ? `Size: ${it.selected_size}` : ""].filter(Boolean).join(", ");
         const sizeLabel = options ? `${baseLabel} (${options})` : baseLabel;
         lines.push(`• ${sizeLabel} – x${qty}`);
 
@@ -1287,18 +1347,18 @@ function updateCartUI() {
       <img class="cartItem__img" loading="lazy" decoding="async" src="${escapeHtmlAttr(toCDN(it.image || ""))}" alt="" onerror="this.style.opacity=.2" />
       <div>
         <div class="cartItem__name">${escapeHtml(it.name || "")}</div>
-        <div class="cartItem__meta">${[it.selected_color ? `Color: ${escapeHtml(it.selected_color)}` : "", it.selected_size ? `Size: ${escapeHtml(it.selected_size)}` : ""].filter(Boolean).join(" • ")}</div>
+        <div class="cartItem__meta">${[escapeHtml(earringCaseLabel(it)), it.selected_color ? `Color: ${escapeHtml(it.selected_color)}` : "", it.selected_size ? `Size: ${escapeHtml(it.selected_size)}` : ""].filter(Boolean).join(" • ")}</div>
         <div class="cartItem__meta">${it.code ? `Code: ${escapeHtml(it.code)}` : ""}</div>
         <div class="cartItem__row">
           <div class="cartQty">
-            <button type="button" data-dec="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}">−</button>
-            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}" />
-            <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}">+</button>
+            <button type="button" data-dec="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || "", getEarringCase(it)))}">−</button>
+            <input type="number" min="1" step="1" value="${Number(it.qty) || 1}" data-qty="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || "", getEarringCase(it)))}" />
+            <button type="button" data-inc="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || "", getEarringCase(it)))}">+</button>
           </div>
           <div style="color:rgba(255,255,255,.75);font-weight:700;">${money(getCartUnitPrice(it) * (Number(it.qty)||0))}</div>
         </div>
       </div>
-      <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || ""))}" aria-label="Remove item">🗑</button>
+      <button class="trashBtn" type="button" data-del="${escapeHtmlAttr(it.cart_key || getCartItemKey(it.id, it.selected_size || '', it.selected_color || "", getEarringCase(it)))}" aria-label="Remove item">🗑</button>
     `;
     itemsWrap.appendChild(row);
   });
@@ -1307,7 +1367,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-dec]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-dec");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "", getEarringCase(x))) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = Math.max(minQty, clampInt(item.qty, minQty) - 1);
@@ -1319,7 +1379,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-inc]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-inc");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "", getEarringCase(x))) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(item.qty, minQty) + 1;
@@ -1331,7 +1391,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-qty]").forEach(inp => {
     inp.addEventListener("input", () => {
       const key = inp.getAttribute("data-qty");
-      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) === String(key));
+      const item = cart.items.find(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "", getEarringCase(x))) === String(key));
       if (!item) return;
       const minQty = getMinQtyForProduct(item);
       item.qty = clampInt(inp.value, minQty);
@@ -1343,7 +1403,7 @@ function updateCartUI() {
   itemsWrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.getAttribute("data-del");
-      cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "")) !== String(key));
+      cart.items = cart.items.filter(x => String(x.cart_key || getCartItemKey(x.id, x.selected_size || '', x.selected_color || "", getEarringCase(x))) !== String(key));
       syncCartWholesalePricing();
       saveCart(); updateCartUI();
     });
@@ -1766,3 +1826,4 @@ document.addEventListener('DOMContentLoaded', bootstrap);
 function parseColors(value) {
   return [...new Map(String(value).split(",").map(c => c.trim()).filter(Boolean).map(c => [c.toUpperCase(), c])).values()];
 }
+
