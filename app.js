@@ -187,12 +187,11 @@ const PRICING_RULES = Object.freeze({
   },
   BOXERS_STANDARD: {
     label: "Designer Boxers",
-    // Mixed regular boxer designs/colors count toward the minimum and tiers.
+    // Mixed regular boxer designs/colors count toward the bulk pricing tiers.
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 35, label: "10–99 total pcs" },
+      { min: 1, max: 99, price: 35, label: "1–99 total pcs" },
       { min: 100, max: 199, price: 30, label: "100–199 total pcs" },
       { min: 200, max: Infinity, price: 29, label: "200+ total pcs" }
     ]
@@ -246,10 +245,9 @@ const PRICING_RULES = Object.freeze({
   EARRINGS: {
     label: "Earrings with crystal case",
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: 99, price: 18, label: "10–99 total pcs · With case" },
+      { min: 1, max: 99, price: 18, label: "1–99 total pcs · With case" },
       { min: 100, max: 499, price: 16, label: "100–499 total pcs · With case" },
       { min: 500, max: Infinity, price: 15, label: "500+ total pcs · With case" }
     ]
@@ -257,10 +255,9 @@ const PRICING_RULES = Object.freeze({
   EARRINGS_NO_CASE: {
     label: "Earrings without case",
     minimum: 1,
-    orderMinimum: 10,
     unit: "pcs",
     tiers: [
-      { min: 10, max: Infinity, price: 13, label: "10+ total pcs · No case" }
+      { min: 1, max: Infinity, price: 13, label: "1+ total pcs · No case" }
     ]
   }
 });
@@ -761,7 +758,7 @@ function initShop() {
         <div class="card__body">
           <div class="card__name">${escapeHtml(prod.name || "")}</div>
           <div class="card__price">${isSoldOut ? "Sold Out" : getEarringCase(prod) ? `From ${money(getPricingGroupUnitPrice(PRICING_GROUPS.EARRINGS_NO_CASE, 10))} each` : money(getUnitPriceForProduct(prod, getMinQtyForProduct(prod)))}</div>
-          ${!isSoldOut && getEarringCase(prod) ? '<div class="muted">No case · Min. 10 pcs</div>' : ""}
+          ${!isSoldOut && getEarringCase(prod) ? '<div class="muted">No case · Available from 1 pc</div>' : ""}
         </div>
       `;
       if (!isSoldOut) {
