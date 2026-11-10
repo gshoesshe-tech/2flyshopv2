@@ -139,7 +139,7 @@ function showNovemberSalePopup() {
       <div class="designerSalePopup__eyebrow">Limited Time Offer</div>
       <h2 class="designerSalePopup__title" id="designerSaleTitle">11.11 Sale</h2>
       <div class="designerSalePopup__product">November 10–13 · From 1 pc</div>
-      <div class="designerSalePopup__sub">Regular boxers ₱29 · Nike/Jordan tanks ₱50<br>Plain tanks ₱43 (100+ pcs ₱40)<br>Branded tees ₱170 · Earrings without case ₱12</div>
+      <div class="designerSalePopup__sub">• Designer Boxers — ONLY ₱29 EACH<br>• Tank Tops — STARTING AT ₱43<br>• Branded Tees — ONLY ₱170 EACH<br>• Iced Out Earrings — STARTING AT ₱12</div>
       <div class="designerSalePopup__until">Ends November 13 · 11:59 PM Philippine time</div>
       <p class="designerSalePopup__sub">Shop now before prices go back up.</p>
       <div class="designerSalePopup__actions">
