@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: NOVEMBER_SALE - November 11–13, 2026 category deals (Asia/Manila), with entry popup and automatic normal-price restore
+   PATCH: NOVEMBER_SALE - November 10–13, 2026 category deals (Asia/Manila), with entry popup and automatic normal-price restore
    - Handles Landing, Shop, and Admin logic
    - Uses the Cloudflare API client in config.js
 */
@@ -70,10 +70,10 @@ const PRICING_GROUPS = Object.freeze({
 
 // ---------------- TEMPORARY NOVEMBER SALE ----------------
 // Sale runs by Philippine calendar date, regardless of the customer's device timezone.
-// November 11–13, 2026: category sale prices apply from 1 pc.
+// November 10–13, 2026: category sale prices apply from 1 pc.
 // On November 14 (Philippine time), regular pricing resumes automatically.
 const NOVEMBER_SALE = Object.freeze({
-  startDatePH: "2026-11-11",
+  startDatePH: "2026-11-10",
   endDatePH: "2026-11-13",
   prices: Object.freeze({ BOXERS_STANDARD: 29, NIKE_TANK: 50, JORDAN_TANK: 50, BRANDED_SHIRTS: 170, EARRINGS_NO_CASE: 12 }),
   label: "11.11 EXCLUSIVE DEALS"
@@ -138,7 +138,7 @@ function showNovemberSalePopup() {
       <button class="designerSalePopup__closeX" type="button" data-sale-close aria-label="Close sale notice">×</button>
       <div class="designerSalePopup__eyebrow">Limited Time Offer</div>
       <h2 class="designerSalePopup__title" id="designerSaleTitle">11.11 Sale</h2>
-      <div class="designerSalePopup__product">November 11–13 · From 1 pc</div>
+      <div class="designerSalePopup__product">November 10–13 · From 1 pc</div>
       <div class="designerSalePopup__sub">Regular boxers ₱29 · Nike/Jordan tanks ₱50<br>Plain tanks ₱43 (100+ pcs ₱40)<br>Branded tees ₱170 · Earrings without case ₱12</div>
       <div class="designerSalePopup__until">Ends November 13 · 11:59 PM Philippine time</div>
       <p class="designerSalePopup__sub">Shop now before prices go back up.</p>
@@ -833,7 +833,7 @@ function initShop() {
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     const rows = saleActive
-      ? `<div class="wholesalePricing__row is-active"><span>${group === PRICING_GROUPS.TANK_STANDARD ? "Plain tanks · 1–99 pcs ₱43 / 100+ pcs ₱40" : "November 11–13 · From 1 pc"}</span><strong>${money(price)} each</strong></div>`
+      ? `<div class="wholesalePricing__row is-active"><span>${group === PRICING_GROUPS.TANK_STANDARD ? "Plain tanks · 1–99 pcs ₱43 / 100+ pcs ₱40" : "November 10–13 · From 1 pc"}</span><strong>${money(price)} each</strong></div>`
       : rule.tiers.map((tier, index) => {
           const belowFirstTier = index === 0 && projectedTotal < rule.tiers[0].min;
           const active = belowFirstTier || (projectedTotal >= tier.min && projectedTotal <= tier.max);
@@ -845,7 +845,7 @@ function initShop() {
       ? `
         <div class="wholesalePricing__title">${escapeHtml(NOVEMBER_SALE.label)}</div>
         ${rows}
-        <div class="wholesalePricing__note">Sale runs November 11–13 (Philippine time). Current group total: ${projectedTotal} pcs. Regular pricing resumes automatically on November 14.</div>
+        <div class="wholesalePricing__note">Sale runs November 10–13 (Philippine time). Current group total: ${projectedTotal} pcs. Regular pricing resumes automatically on November 14.</div>
       `
       : `
         <div class="wholesalePricing__title">Wholesale Pricing</div>
