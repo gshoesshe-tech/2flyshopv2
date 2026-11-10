@@ -1,6 +1,6 @@
 
 /* 2FLY Wholesale System (Fixed)
-   PATCH: STANDARD_BOXER_SALE_OCT10 - ₱29 regular boxers from 1 pc on October 10, 2026 (Asia/Manila), with entry popup and automatic normal-price restore
+   PATCH: NOVEMBER_SALE - November 11–13, 2026 category deals (Asia/Manila), with entry popup and automatic normal-price restore
    - Handles Landing, Shop, and Admin logic
    - Uses the Cloudflare API client in config.js
 */
@@ -68,15 +68,15 @@ const PRICING_GROUPS = Object.freeze({
   EARRINGS_NO_CASE: "EARRINGS_NO_CASE"
 });
 
-// ---------------- TEMPORARY STANDARD BOXER SALE ----------------
+// ---------------- TEMPORARY NOVEMBER SALE ----------------
 // Sale runs by Philippine calendar date, regardless of the customer's device timezone.
-// October 10, 2026: all BOXERS_STANDARD are ₱29 each starting from 1 pc.
-// On October 11 (Philippine time), regular pricing takes over automatically.
-const STANDARD_BOXER_SALE = Object.freeze({
-  startDatePH: "2026-10-10",
-  endDatePH: "2026-10-10",
-  price: 29,
-  label: "10.10 SALE"
+// November 11–13, 2026: category sale prices apply from 1 pc.
+// On November 14 (Philippine time), regular pricing resumes automatically.
+const NOVEMBER_SALE = Object.freeze({
+  startDatePH: "2026-11-11",
+  endDatePH: "2026-11-13",
+  prices: Object.freeze({ BOXERS_STANDARD: 29, NIKE_TANK: 50, JORDAN_TANK: 50, BRANDED_SHIRTS: 170, EARRINGS_NO_CASE: 12 }),
+  label: "11.11 EXCLUSIVE DEALS"
 });
 
 function getPhilippineDateKey(date = new Date()) {
@@ -96,14 +96,14 @@ function getPhilippineDateKey(date = new Date()) {
   }
 }
 
-function isStandardBoxerSaleActive(date = new Date()) {
+function isNovemberSaleActive(date = new Date()) {
   const dateKey = getPhilippineDateKey(date);
-  return dateKey >= STANDARD_BOXER_SALE.startDatePH && dateKey <= STANDARD_BOXER_SALE.endDatePH;
+  return dateKey >= NOVEMBER_SALE.startDatePH && dateKey <= NOVEMBER_SALE.endDatePH;
 }
 
-function showDesignerBoxerSalePopup() {
+function showNovemberSalePopup() {
   // Show on every shop page load while the sale is active. No localStorage/sessionStorage on purpose.
-  if (!isStandardBoxerSaleActive() || document.getElementById("designerBoxerSalePopup")) return;
+  if (!isNovemberSaleActive() || document.getElementById("designerBoxerSalePopup")) return;
 
   if (!document.getElementById("designerBoxerSalePopupStyles")) {
     const style = document.createElement("style");
@@ -137,10 +137,10 @@ function showDesignerBoxerSalePopup() {
     <div class="designerSalePopup__card">
       <button class="designerSalePopup__closeX" type="button" data-sale-close aria-label="Close sale notice">×</button>
       <div class="designerSalePopup__eyebrow">Limited Time Offer</div>
-      <h2 class="designerSalePopup__title" id="designerSaleTitle">10.10 Sale</h2>
-      <div class="designerSalePopup__product">Regular Boxers</div>
-      <div class="designerSalePopup__price">₱29 EACH</div>
-      <div class="designerSalePopup__until">October 10 only · Until 11:59 PM Philippine time</div>
+      <h2 class="designerSalePopup__title" id="designerSaleTitle">11.11 Sale</h2>
+      <div class="designerSalePopup__product">November 11–13 · From 1 pc</div>
+      <div class="designerSalePopup__sub">Regular boxers ₱29 · Nike/Jordan tanks ₱50<br>Plain tanks ₱43 (100+ pcs ₱40)<br>Branded tees ₱170 · Earrings without case ₱12</div>
+      <div class="designerSalePopup__until">Ends November 13 · 11:59 PM Philippine time</div>
       <p class="designerSalePopup__sub">Shop now before prices go back up.</p>
       <div class="designerSalePopup__actions">
         <button class="designerSalePopup__btn designerSalePopup__btn--primary" type="button" data-sale-shop>Shop Now</button>
@@ -394,14 +394,17 @@ function getTierForQty(rule, qty) {
     || rule.tiers[rule.tiers.length - 1];
 }
 
+function getNovemberSalePrice(group, qty, date = new Date()) {
+  if (!isNovemberSaleActive(date)) return null;
+  if (group === PRICING_GROUPS.TANK_STANDARD) return Number(qty) >= 100 ? 40 : 43;
+  return Object.prototype.hasOwnProperty.call(NOVEMBER_SALE.prices, group) ? NOVEMBER_SALE.prices[group] : null;
+}
+
 function getPricingGroupUnitPrice(group, qty) {
   const normalizedGroup = normalizePricingGroup(group);
 
-  // Temporary 10.10 sale override. This sits above the normal pricing rules so
-  // every standard boxer in the cart stays ₱29 on October 10, 2026.
-  if (normalizedGroup === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) {
-    return STANDARD_BOXER_SALE.price;
-  }
+  const salePrice = getNovemberSalePrice(normalizedGroup, qty);
+  if (salePrice !== null) return salePrice;
 
   const rule = getPricingRule(normalizedGroup);
   const tier = getTierForQty(rule, qty);
@@ -423,7 +426,7 @@ function getCartPricingGroupQty(group) {
 function getWholesaleMinimumError() {
   for (const [group, rule] of Object.entries(PRICING_RULES)) {
     // Enforce a group minimum only when the pricing rule explicitly defines one.
-    if (group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive()) continue;
+    if (group === PRICING_GROUPS.BOXERS_STANDARD && isNovemberSaleActive()) continue;
 
     const required = Math.max(0, Number(rule?.orderMinimum) || 0);
     if (!required) continue;
@@ -574,7 +577,7 @@ function addToCart(prod, qty, selectedSize = "", selectedColor = "") {
 function initShop() {
   loadCart();
   wireCartUI();
-  showDesignerBoxerSalePopup();
+  showNovemberSalePopup();
 
   const sb = getBackend(); // Use the safe getter
   const grid = $("#productsGrid");
@@ -824,13 +827,13 @@ function initShop() {
     const key = getCartItemKey(currentProd.id, cleanSize, selectedColor, getEarringCase(currentProd));
     const existing = cart.items.find((item) => String(item.cart_key || getCartItemKey(item.id, item.selected_size || '', item.selected_color || "", getEarringCase(item))) === key);
     const projectedTotal = getTotalPricingGroupQty(group, q, existing ? key : '');
-    const saleActive = group === PRICING_GROUPS.BOXERS_STANDARD && isStandardBoxerSaleActive();
+    const saleActive = getNovemberSalePrice(group, projectedTotal) !== null;
     const price = getPricingGroupUnitPrice(group, projectedTotal);
     currentProd.price = price;
     if (pPrice) pPrice.textContent = `${money(price)} / pc`;
 
     const rows = saleActive
-      ? `<div class="wholesalePricing__row is-active"><span>October 10 only · No minimum</span><strong>${money(STANDARD_BOXER_SALE.price)} each</strong></div>`
+      ? `<div class="wholesalePricing__row is-active"><span>${group === PRICING_GROUPS.TANK_STANDARD ? "Plain tanks · 1–99 pcs ₱43 / 100+ pcs ₱40" : "November 11–13 · From 1 pc"}</span><strong>${money(price)} each</strong></div>`
       : rule.tiers.map((tier, index) => {
           const belowFirstTier = index === 0 && projectedTotal < rule.tiers[0].min;
           const active = belowFirstTier || (projectedTotal >= tier.min && projectedTotal <= tier.max);
@@ -840,9 +843,9 @@ function initShop() {
     box.hidden = false;
     box.innerHTML = saleActive
       ? `
-        <div class="wholesalePricing__title">${escapeHtml(STANDARD_BOXER_SALE.label)}</div>
+        <div class="wholesalePricing__title">${escapeHtml(NOVEMBER_SALE.label)}</div>
         ${rows}
-        <div class="wholesalePricing__note">Regular boxers are ${money(STANDARD_BOXER_SALE.price)} each from 1 pc on October 10 only (Philippine time). Regular pricing resumes automatically on October 11.</div>
+        <div class="wholesalePricing__note">Sale runs November 11–13 (Philippine time). Current group total: ${projectedTotal} pcs. Regular pricing resumes automatically on November 14.</div>
       `
       : `
         <div class="wholesalePricing__title">Wholesale Pricing</div>
@@ -859,6 +862,8 @@ function initShop() {
     options.innerHTML = "";
     if (wrap.hidden) return;
     prod.selected_case = getEarringCase(prod);
+    const caseNote = document.getElementById("pCaseNote");
+    if (caseNote) caseNote.textContent = `Mix earring designs. Available from 1 pc per option. With case: ₱18 each for 1–99, ₱16 for 100–499, ₱15 for 500+. No case: ${money(getPricingGroupUnitPrice(PRICING_GROUPS.EARRINGS_NO_CASE, 1))} each from 1 pc.`;
     for (const [value, label] of [["with_case", "With crystal case"], ["no_case", "No case"]]) {
       const button = document.createElement("button");
       button.type = "button";
@@ -1824,4 +1829,5 @@ document.addEventListener('DOMContentLoaded', bootstrap);
 function parseColors(value) {
   return [...new Map(String(value).split(",").map(c => c.trim()).filter(Boolean).map(c => [c.toUpperCase(), c])).values()];
 }
+
 
