@@ -182,7 +182,9 @@ const PRICING_RULES = Object.freeze({
     unit: "pcs",
     tiers: [
       { min: 1, max: 4, price: 199, label: "1–4 total pcs" },
-      { min: 5, max: Infinity, price: 175, label: "5+ total pcs" }
+      { min: 5, max: 19, price: 175, label: "5–19 total pcs" },
+      { min: 20, max: 149, price: 170, label: "20–149 total pcs" },
+      { min: 150, max: Infinity, price: 160, label: "150+ total pcs" }
     ]
   },
   BOXERS_STANDARD: {
